@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from pydepend.graph import DependencyGraph
+from import_cruiser.graph import DependencyGraph
 
 
 def detect_cycles(graph: DependencyGraph) -> list[list[str]]:

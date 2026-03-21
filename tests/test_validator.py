@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pydepend.graph import Dependency, DependencyGraph, Module
-from pydepend.validator import Validator, Violation
+from import_cruiser.graph import Dependency, DependencyGraph, Module
+from import_cruiser.validator import Validator, Violation
 
 
 def make_graph_with_deps(edges: list[tuple[str, str]]) -> DependencyGraph:

@@ -6,13 +6,17 @@ import ast
 import os
 from pathlib import Path
 
-from pydepend.graph import Dependency, DependencyGraph, Module
+from import_cruiser.graph import Dependency, DependencyGraph, Module
 
 
-def _module_name_from_path(path: Path, root: Path) -> str:
-    """Convert a file path to a dotted module name relative to *root*."""
-    rel = path.relative_to(root)
+def _module_name_from_path(
+    path: Path, base: Path, normalize_hyphens: bool = True
+) -> str:
+    """Convert a file path to a dotted module name relative to *base*."""
+    rel = path.relative_to(base)
     parts = list(rel.parts)
+    if normalize_hyphens:
+        parts = [p.replace("-", "_") for p in parts]
     if parts[-1] == "__init__.py":
         parts = parts[:-1]
     else:
@@ -45,12 +49,20 @@ def _collect_imports(source: str, module_name: str) -> list[tuple[str, int]]:
                 parts = module_name.split(".")
                 base_parts = parts[: max(0, len(parts) - node.level)]
                 if node.module:
-                    resolved = ".".join(base_parts + [node.module]) if base_parts else node.module
+                    resolved = (
+                        ".".join(base_parts + [node.module])
+                        if base_parts
+                        else node.module
+                    )
                     imports.append((resolved, node.lineno))
                 else:
                     # `from . import name` – each name is a sub-module
                     for alias in node.names:
-                        resolved = ".".join(base_parts + [alias.name]) if base_parts else alias.name
+                        resolved = (
+                            ".".join(base_parts + [alias.name])
+                            if base_parts
+                            else alias.name
+                        )
                         imports.append((resolved, node.lineno))
     return imports
 
@@ -71,18 +83,21 @@ def _iter_python_files(directory: Path) -> list[Path]:
 class Analyzer:
     """Analyze a Python project directory and produce a DependencyGraph."""
 
-    def __init__(self, root: str | Path) -> None:
+    def __init__(self, root: str | Path, normalize_hyphens: bool = True) -> None:
         self.root = Path(root).resolve()
+        self.normalize_hyphens = normalize_hyphens
 
     def analyze(self) -> DependencyGraph:
         """Walk the project directory and return a fully populated DependencyGraph."""
         graph = DependencyGraph()
         py_files = _iter_python_files(self.root)
+        source_roots = _find_source_roots(self.root)
 
         # First pass: register all modules
         module_map: dict[str, Path] = {}
         for py_file in py_files:
-            mod_name = _module_name_from_path(py_file, self.root)
+            base = _select_source_root(py_file, source_roots) or self.root
+            mod_name = _module_name_from_path(py_file, base, self.normalize_hyphens)
             module_map[mod_name] = py_file
             graph.add_module(Module(name=mod_name, path=str(py_file)))
 
@@ -121,3 +136,27 @@ def _resolve_internal(imported: str, known_modules: set[str]) -> str | None:
                 if candidate in known_modules:
                     return candidate
     return None
+
+
+def _find_source_roots(root: Path) -> list[Path]:
+    roots: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        if os.path.basename(dirpath) == "src":
+            src_path = Path(dirpath).resolve()
+            if _contains_python_files(src_path):
+                roots.append(src_path)
+    return roots
+
+
+def _contains_python_files(directory: Path) -> bool:
+    for dirpath, _, filenames in os.walk(directory):
+        if any(name.endswith(".py") for name in filenames):
+            return True
+    return False
+
+
+def _select_source_root(path: Path, roots: list[Path]) -> Path | None:
+    candidates = [r for r in roots if path.is_relative_to(r)]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda p: len(p.parts))

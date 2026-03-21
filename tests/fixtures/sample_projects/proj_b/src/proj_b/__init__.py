@@ -1,0 +1,1 @@
+"""Project B root package."""

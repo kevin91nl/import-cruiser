@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import json
 
-import pytest
 
-from pydepend.exporter import export_dot, export_json
-from pydepend.graph import Dependency, DependencyGraph, Module
-from pydepend.validator import Violation
+from import_cruiser.exporter import export_dot, export_json
+from import_cruiser.graph import Dependency, DependencyGraph, Module
+from import_cruiser.validator import Violation
 
 
 def simple_graph() -> DependencyGraph:

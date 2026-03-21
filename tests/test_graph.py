@@ -1,8 +1,12 @@
 """Tests for the DependencyGraph data structure."""
 
-import pytest
-
-from pydepend.graph import Dependency, DependencyGraph, Module
+from import_cruiser.graph import (
+    Dependency,
+    DependencyGraph,
+    Module,
+    collapse_graph,
+    filter_graph,
+)
 
 
 def make_graph(edges: list[tuple[str, str]]) -> DependencyGraph:
@@ -71,3 +75,31 @@ class TestDependencyGraph:
     def test_get_module_missing(self) -> None:
         g = DependencyGraph()
         assert g.get_module("nonexistent") is None
+
+
+class TestGraphFiltering:
+    def test_include_exclude(self) -> None:
+        g = make_graph([("a.core", "b.core"), ("a.core", "c.util")])
+        filtered = filter_graph(g, include=["^a\\."], exclude=["util$"])
+        assert {m.name for m in filtered.modules} == {"a.core"}
+        assert set(filtered.edges()) == set()
+
+    def test_focus_depth(self) -> None:
+        g = make_graph([("a", "b"), ("b", "c"), ("c", "d")])
+        focused = filter_graph(g, focus=["^b$"], focus_depth=1)
+        assert {m.name for m in focused.modules} == {"a", "b", "c"}
+
+    def test_include_path(self) -> None:
+        g = DependencyGraph()
+        g.add_module(Module(name="a", path="/repo/src/a.py"))
+        g.add_module(Module(name="b", path="/repo/tests/b.py"))
+        filtered = filter_graph(g, include_paths=[r"src/"])
+        assert {m.name for m in filtered.modules} == {"a"}
+
+
+class TestGraphCollapse:
+    def test_collapse_depth(self) -> None:
+        g = make_graph([("pkg.a", "pkg.b"), ("pkg.b", "other.c")])
+        collapsed = collapse_graph(g, depth=1)
+        assert {m.name for m in collapsed.modules} == {"pkg", "other"}
+        assert set(collapsed.edges()) == {("pkg", "other")}

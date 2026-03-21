@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from pydepend.graph import DependencyGraph
+from import_cruiser.graph import DependencyGraph
 
 
 def _matches_pattern(name: str, pattern_obj: dict[str, Any]) -> bool:

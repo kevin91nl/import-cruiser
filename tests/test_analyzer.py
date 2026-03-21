@@ -5,9 +5,8 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
-import pytest
 
-from pydepend.analyzer import Analyzer, _collect_imports, _module_name_from_path
+from import_cruiser.analyzer import Analyzer, _collect_imports, _module_name_from_path
 
 
 class TestModuleNameFromPath:
@@ -133,3 +132,13 @@ class TestAnalyzer:
         mod_names = {m.name for m in graph.modules}
         assert "real" in mod_names
         assert "cached" not in mod_names
+
+
+def test_source_root_detection(tmp_path: Path) -> None:
+    src = tmp_path / "proj" / "src" / "pkg"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text("")
+    (src / "mod.py").write_text("import pkg\n")
+
+    graph = Analyzer(tmp_path).analyze()
+    assert "pkg.mod" in {m.name for m in graph.modules}

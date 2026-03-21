@@ -1,8 +1,8 @@
-# pydepend
+# import-cruiser
 
 **Analyze, validate, and visualize Python import dependencies.**
 
-`pydepend` is a CLI tool for Python projects inspired by [dependency-cruiser](https://github.com/sverweij/dependency-cruiser). It parses Python `import` statements, builds a dependency graph, detects circular dependencies, validates the graph against configurable rules, and can export the results as JSON or DOT (Graphviz) format.
+`import-cruiser` is a CLI tool for Python projects inspired by [dependency-cruiser](https://github.com/sverweij/dependency-cruiser). It parses Python `import` statements, builds a dependency graph, detects circular dependencies, validates the graph against configurable rules, and can export the results as JSON or DOT (Graphviz) format.
 
 ---
 
@@ -21,14 +21,14 @@
 ### With pip
 
 ```bash
-pip install pydepend
+pip install import-cruiser
 ```
 
 ### From source (with [Poetry](https://python-poetry.org/))
 
 ```bash
-git clone https://github.com/kevin91nl/pydepend.git
-cd pydepend
+git clone https://github.com/kevin91nl/import-cruiser.git
+cd import-cruiser
 poetry install
 ```
 
@@ -37,7 +37,7 @@ poetry install
 ## CLI Usage
 
 ```
-pydepend [OPTIONS] COMMAND [ARGS]...
+import-cruiser [OPTIONS] COMMAND [ARGS]...
 
 Commands:
   analyze   Analyze imports and output results.
@@ -51,13 +51,13 @@ Scan a Python project and output a JSON or DOT dependency report.
 
 ```bash
 # JSON report (default)
-pydepend analyze ./myproject
+import-cruiser analyze ./myproject
 
 # DOT format for Graphviz
-pydepend analyze ./myproject --format dot
+import-cruiser analyze ./myproject --format dot
 
 # Write to file
-pydepend analyze ./myproject --output report.json
+import-cruiser analyze ./myproject --output report.json
 ```
 
 **JSON output structure:**
@@ -82,10 +82,10 @@ pydepend analyze ./myproject --output report.json
 Validate dependencies against rules defined in a JSON configuration file.
 
 ```bash
-pydepend validate ./myproject --config pydepend.json
+import-cruiser validate ./myproject --config import-cruiser.json
 
 # Exit non-zero if there are any violations (useful in CI)
-pydepend validate ./myproject --config pydepend.json --strict
+import-cruiser validate ./myproject --config import-cruiser.json --strict
 ```
 
 ### `export`
@@ -93,7 +93,7 @@ pydepend validate ./myproject --config pydepend.json --strict
 Export the dependency graph to DOT format (compatible with [Graphviz](https://graphviz.org/)).
 
 ```bash
-pydepend export ./myproject --output graph.dot
+import-cruiser export ./myproject --output graph.dot
 
 # Render with Graphviz
 dot -Tsvg graph.dot -o graph.svg
@@ -103,7 +103,7 @@ dot -Tsvg graph.dot -o graph.svg
 
 ## Configuration
 
-Create a `pydepend.json` file to define dependency rules:
+Create a `import-cruiser.json` file to define dependency rules:
 
 ```json
 {
@@ -154,7 +154,7 @@ An empty pattern object `{}` matches **all** modules.
 ### Detect circular dependencies
 
 ```bash
-pydepend analyze ./myproject
+import-cruiser analyze ./myproject
 # Check the "cycles" key in the JSON output
 ```
 
@@ -175,13 +175,13 @@ pydepend analyze ./myproject
 ```
 
 ```bash
-pydepend validate ./myproject --config pydepend.json --strict
+import-cruiser validate ./myproject --config import-cruiser.json --strict
 ```
 
 ### Visualize dependencies
 
 ```bash
-pydepend export ./myproject --output deps.dot
+import-cruiser export ./myproject --output deps.dot
 dot -Tpng deps.dot -o deps.png
 open deps.png
 ```

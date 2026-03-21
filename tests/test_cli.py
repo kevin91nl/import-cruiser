@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import json
-import textwrap
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
-from pydepend.cli import main
+from import_cruiser.cli import main
 
 
 @pytest.fixture()
@@ -44,7 +43,9 @@ class TestAnalyzeCommand:
 
     def test_dot_output(self, sample_project: Path) -> None:
         runner = CliRunner()
-        result = runner.invoke(main, ["analyze", str(sample_project), "--format", "dot"])
+        result = runner.invoke(
+            main, ["analyze", str(sample_project), "--format", "dot"]
+        )
         assert result.exit_code == 0, result.output
         assert "digraph" in result.output
 
@@ -76,7 +77,9 @@ class TestValidateCommand:
         assert "violations" in data
         assert data["violations"] == []
 
-    def test_with_config_no_violations(self, sample_project: Path, tmp_path: Path) -> None:
+    def test_with_config_no_violations(
+        self, sample_project: Path, tmp_path: Path
+    ) -> None:
         config = {
             "rules": [
                 {
@@ -178,7 +181,7 @@ class TestExportCommand:
 
 class TestVersionCommand:
     def test_version_flag(self) -> None:
-        from pydepend import __version__
+        from import_cruiser import __version__
 
         runner = CliRunner()
         result = runner.invoke(main, ["--version"])

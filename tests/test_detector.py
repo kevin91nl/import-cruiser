@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pydepend.detector import detect_cycles
-from pydepend.graph import Dependency, DependencyGraph, Module
+from import_cruiser.detector import detect_cycles
+from import_cruiser.graph import Dependency, DependencyGraph, Module
 
 
 def make_graph(edges: list[tuple[str, str]]) -> DependencyGraph:

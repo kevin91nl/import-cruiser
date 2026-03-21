@@ -7,7 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from pydepend.config import ConfigError, load_config, validate_config, default_config
+from import_cruiser.config import (
+    ConfigError,
+    load_config,
+    validate_config,
+    default_config,
+)
 
 
 class TestValidateConfig:
@@ -80,7 +85,7 @@ class TestLoadConfig:
                 }
             ]
         }
-        cfg_file = tmp_path / "pydepend.json"
+        cfg_file = tmp_path / "import-cruiser.json"
         cfg_file.write_text(json.dumps(config))
         loaded = load_config(cfg_file)
         assert loaded["rules"][0]["name"] == "no-ui-to-data"

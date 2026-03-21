@@ -1,4 +1,4 @@
-"""Load and validate pydepend configuration."""
+"""Load and validate import_cruiser configuration."""
 
 from __future__ import annotations
 
