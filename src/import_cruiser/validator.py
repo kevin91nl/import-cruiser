@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 import re
-from typing import Any
 
+from import_cruiser.config import JSONDict
 from import_cruiser.graph import DependencyGraph
 
 
-def _matches_pattern(name: str, pattern_obj: dict[str, Any]) -> bool:
+def _matches_pattern(name: str, pattern_obj: JSONDict) -> bool:
     """Return True if *name* matches the pattern specification in *pattern_obj*.
 
     Supported keys:
       - ``path``: a regex applied to the module name (dot-separated)
     """
     path_pattern = pattern_obj.get("path")
-    if path_pattern is not None:
+    if isinstance(path_pattern, str):
         return bool(re.search(path_pattern, name))
     # Empty pattern matches everything
     return True
@@ -40,7 +40,7 @@ class Violation:
         self.source = source
         self.target = target
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> JSONDict:
         return {
             "rule": self.rule_name,
             "severity": self.severity,
@@ -53,7 +53,7 @@ class Violation:
 class Validator:
     """Validate a DependencyGraph against a list of rules."""
 
-    def __init__(self, rules: list[dict[str, Any]]) -> None:
+    def __init__(self, rules: list[JSONDict]) -> None:
         self.rules = rules
 
     def validate(self, graph: DependencyGraph) -> list[Violation]:
@@ -63,15 +63,15 @@ class Validator:
             violations.extend(self._apply_rule(rule, graph))
         return violations
 
-    def _apply_rule(
-        self, rule: dict[str, Any], graph: DependencyGraph
-    ) -> list[Violation]:
+    def _apply_rule(self, rule: JSONDict, graph: DependencyGraph) -> list[Violation]:
         violations: list[Violation] = []
-        rule_name: str = rule["name"]
-        severity: str = rule["severity"]
-        from_pattern: dict[str, Any] = rule["from"]
-        to_pattern: dict[str, Any] = rule["to"]
-        allow: bool = rule.get("allow", True)
+        rule_name = str(rule.get("name", "rule"))
+        severity = str(rule.get("severity", "error"))
+        from_raw = rule.get("from", {})
+        to_raw = rule.get("to", {})
+        from_pattern = from_raw if isinstance(from_raw, dict) else {}
+        to_pattern = to_raw if isinstance(to_raw, dict) else {}
+        allow = bool(rule.get("allow", True))
 
         for dep in graph.dependencies:
             source_matches = _matches_pattern(dep.source, from_pattern)

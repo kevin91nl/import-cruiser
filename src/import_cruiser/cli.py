@@ -1,4 +1,5 @@
 """CLI entry point for import-cruiser."""
+# pylint: disable=duplicate-code
 
 from __future__ import annotations
 
@@ -11,11 +12,16 @@ import click
 
 from import_cruiser import __version__
 from import_cruiser.analyzer import Analyzer
-from import_cruiser.config import ConfigError, default_config, load_config
+from import_cruiser.config import JSONDict, ConfigError, default_config, load_config
 from import_cruiser.detector import detect_cycles
 from import_cruiser.exporter import export_dot, export_html, export_json, export_svg
-from import_cruiser.graph import aggregate_by_path, collapse_graph, filter_graph
-from import_cruiser.validator import Validator
+from import_cruiser.graph import (
+    DependencyGraph,
+    aggregate_by_path,
+    collapse_graph,
+    filter_graph,
+)
+from import_cruiser.validator import Validator, Violation
 
 
 @click.group()
@@ -277,7 +283,7 @@ def cmd_validate(
 
     graph = Analyzer(path).analyze()
     cycles = detect_cycles(graph)
-    rules = config.get("rules", [])
+    rules = _extract_rules(config)
     violations = Validator(rules).validate(graph)
 
     result = export_json(graph, violations=violations, cycles=cycles)
@@ -591,15 +597,15 @@ def _apply_graph_options(
 
 
 def _export_svg(
-    graph,
-    violations=None,
+    graph: DependencyGraph,
+    violations: list[Violation] | None = None,
     layout: str = "dot",
     rankdir: str = "LR",
     cluster_depth: int = 3,
     cluster_mode: str = "path",
     style: str = "default",
     edge_mode: str = "node",
-):
+) -> str:
     if violations is None:
         violations = []
     try:
@@ -618,7 +624,9 @@ def _export_svg(
         sys.exit(2)
 
 
-def _load_violations(config_path: Optional[str], graph) -> list:
+def _load_violations(
+    config_path: Optional[str], graph: DependencyGraph
+) -> list[Violation]:
     if not config_path:
         return []
     try:
@@ -626,8 +634,15 @@ def _load_violations(config_path: Optional[str], graph) -> list:
     except ConfigError as exc:
         click.echo(f"Configuration error: {exc}", err=True)
         sys.exit(1)
-    rules = config.get("rules", [])
+    rules = _extract_rules(config)
     return Validator(rules).validate(graph)
+
+
+def _extract_rules(config: JSONDict) -> list[JSONDict]:
+    rules_raw = config.get("rules", [])
+    if not isinstance(rules_raw, list):
+        return []
+    return [rule for rule in rules_raw if isinstance(rule, dict)]
 
 
 if __name__ == "__main__":

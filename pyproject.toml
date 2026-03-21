@@ -24,6 +24,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 addopts = "--tb=short"
 
 [tool.coverage.run]
@@ -31,3 +32,33 @@ source = ["src/import_cruiser"]
 
 [tool.coverage.report]
 show_missing = true
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unused_configs = true
+
+[tool.pylint.main]
+jobs = 0
+ignore-paths = ["tests/fixtures"]
+
+[tool.pylint.messages_control]
+disable = ["all"]
+enable = ["duplicate-code", "function-redefined"]
+
+[tool.import_cruiser_metrics]
+max_instability = 1.0
+indirection_allowlist = ["import_cruiser.detector._normalise_cycle"]
+
+[tool.import_cruiser_code_budget]
+file_allowlist = [
+  "src/import_cruiser/cli.py",
+  "src/import_cruiser/exporter.py",
+]
+function_allowlist = [
+  "import_cruiser.cli._apply_graph_options",
+  "import_cruiser.exporter.export_dot",
+  "import_cruiser.graph.aggregate_by_path",
+]

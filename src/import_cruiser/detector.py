@@ -24,6 +24,7 @@ def detect_cycles(graph: DependencyGraph) -> list[list[str]]:
     visited: set[str] = set()
     rec_stack: set[str] = set()
     cycles: list[list[str]] = []
+    seen_cycles: set[frozenset[str]] = set()
 
     def dfs(node: str, path: list[str]) -> None:
         visited.add(node)
@@ -39,10 +40,10 @@ def detect_cycles(graph: DependencyGraph) -> list[list[str]]:
                 # Found a cycle – extract the cycle segment
                 cycle_start = path.index(neighbour)
                 cycle = path[cycle_start:]
-                # Avoid duplicate cycles (same nodes, different starting point)
                 normalised = _normalise_cycle(cycle)
-                if normalised not in [_normalise_cycle(c) for c in cycles]:
+                if normalised not in seen_cycles:
                     cycles.append(list(cycle))
+                    seen_cycles.add(normalised)
 
         path.pop()
         rec_stack.discard(node)

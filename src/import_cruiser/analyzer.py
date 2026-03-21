@@ -120,21 +120,17 @@ class Analyzer:
 
 def _resolve_internal(imported: str, known_modules: set[str]) -> str | None:
     """Return the best-matching known module for *imported*, or None."""
-    # Exact match
     if imported in known_modules:
         return imported
-    # Check if any known module is a prefix (package import)
-    for mod in known_modules:
-        if mod.startswith(imported + ".") or imported.startswith(mod + "."):
-            # Pick the most specific match that exists
-            if imported in known_modules:
-                return imported
-            # Walk up the imported name to find the deepest known ancestor
-            parts = imported.split(".")
-            for i in range(len(parts), 0, -1):
-                candidate = ".".join(parts[:i])
-                if candidate in known_modules:
-                    return candidate
+
+    if any(mod.startswith(imported + ".") for mod in known_modules):
+        return imported
+
+    parts = imported.split(".")
+    for i in range(len(parts) - 1, 0, -1):
+        candidate = ".".join(parts[:i])
+        if candidate in known_modules:
+            return candidate
     return None
 
 

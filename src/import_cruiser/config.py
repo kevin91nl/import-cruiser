@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import TypeAlias
 
 
-DEFAULT_CONFIG: dict[str, Any] = {
+JSONScalar: TypeAlias = str | int | float | bool | None
+JSONValue: TypeAlias = JSONScalar | list["JSONValue"] | dict[str, "JSONValue"]
+JSONDict: TypeAlias = dict[str, JSONValue]
+
+DEFAULT_CONFIG: JSONDict = {
     "rules": [],
     "options": {
         "include_external": False,
@@ -23,7 +27,7 @@ class ConfigError(ValueError):
     """Raised when the configuration is invalid."""
 
 
-def load_config(path: str | Path) -> dict[str, Any]:
+def load_config(path: str | Path) -> JSONDict:
     """Load a JSON configuration file and return the parsed dict."""
     config_path = Path(path)
     if not config_path.exists():
@@ -38,7 +42,7 @@ def load_config(path: str | Path) -> dict[str, Any]:
     return raw
 
 
-def validate_config(config: dict[str, Any]) -> None:
+def validate_config(config: JSONDict) -> None:
     """Raise ConfigError if *config* does not conform to the expected schema."""
     if not isinstance(config, dict):
         raise ConfigError("Configuration must be a JSON object.")
@@ -63,7 +67,7 @@ def validate_config(config: dict[str, Any]) -> None:
                 raise ConfigError(f"Rule #{i} '{field}' must be an object.")
 
 
-def default_config() -> dict[str, Any]:
+def default_config() -> JSONDict:
     """Return a deep copy of the default configuration."""
     import copy
 

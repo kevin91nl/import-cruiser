@@ -1,4 +1,5 @@
 """Export a DependencyGraph to JSON or DOT (Graphviz) format."""
+# pylint: disable=duplicate-code
 
 from __future__ import annotations
 
@@ -6,11 +7,19 @@ import json
 import os
 import subprocess  # nosec B404
 from pathlib import Path
-from typing import Any
+from typing import TypedDict, cast
 
 from import_cruiser.detector import detect_cycles
-from import_cruiser.graph import DependencyGraph
+from import_cruiser.config import JSONDict
+from import_cruiser.graph import DependencyGraph, Module
 from import_cruiser.validator import Violation
+
+
+class Cluster(TypedDict):
+    id: str
+    label: str
+    parent: str | None
+    modules: list[Module]
 
 
 def export_json(
@@ -24,28 +33,31 @@ def export_json(
     if cycles is None:
         cycles = detect_cycles(graph)
 
-    data: dict[str, Any] = {
-        "summary": {
-            "modules": len(graph.modules),
-            "dependencies": len(graph.dependencies),
-            "cycles": len(cycles),
-            "violations": len(violations),
+    data = cast(
+        JSONDict,
+        {
+            "summary": {
+                "modules": len(graph.modules),
+                "dependencies": len(graph.dependencies),
+                "cycles": len(cycles),
+                "violations": len(violations),
+            },
+            "modules": [
+                {
+                    "name": m.name,
+                    "path": m.path,
+                    "imports": graph.dependencies_of(m.name),
+                }
+                for m in sorted(graph.modules, key=lambda m: m.name)
+            ],
+            "dependencies": [
+                {"source": d.source, "target": d.target, "line": d.line}
+                for d in sorted(graph.dependencies, key=lambda d: (d.source, d.target))
+            ],
+            "cycles": [cycle for cycle in cycles],
+            "violations": [v.to_dict() for v in violations],
         },
-        "modules": [
-            {
-                "name": m.name,
-                "path": m.path,
-                "imports": graph.dependencies_of(m.name),
-            }
-            for m in sorted(graph.modules, key=lambda m: m.name)
-        ],
-        "dependencies": [
-            {"source": d.source, "target": d.target, "line": d.line}
-            for d in sorted(graph.dependencies, key=lambda d: (d.source, d.target))
-        ],
-        "cycles": [cycle for cycle in cycles],
-        "violations": [v.to_dict() for v in violations],
-    }
+    )
     return json.dumps(data, indent=2)
 
 
@@ -240,9 +252,11 @@ def _edges_in_cycles(cycles: list[list[str]]) -> set[tuple[str, str]]:
     return edges
 
 
-def _build_clusters(modules: list, depth: int, mode: str):
-    clusters: dict[str, dict] = {}
-    root_modules: list = []
+def _build_clusters(
+    modules: list[Module], depth: int, mode: str
+) -> tuple[dict[str, Cluster], list[Module], dict[str, Cluster]]:
+    clusters: dict[str, Cluster] = {}
+    root_modules: list[Module] = []
     root_path = _common_root(modules) if mode == "path" else None
 
     for module in modules:
@@ -268,7 +282,7 @@ def _build_clusters(modules: list, depth: int, mode: str):
             continue
         clusters[parent_id]["modules"].append(module)
 
-    root_clusters: dict[str, dict] = {}
+    root_clusters: dict[str, Cluster] = {}
     for cid, cluster in clusters.items():
         parent = cluster["parent"]
         if parent is None:
@@ -278,14 +292,18 @@ def _build_clusters(modules: list, depth: int, mode: str):
 
 
 def _render_cluster_tree(
-    root_clusters, flat_clusters, cycle_nodes, indent: str, mode: str
-):
+    root_clusters: dict[str, Cluster],
+    flat_clusters: dict[str, Cluster],
+    cycle_nodes: set[str],
+    indent: str,
+    mode: str,
+) -> list[str]:
     lines: list[str] = []
 
-    def children_of(parent_id: str):
+    def children_of(parent_id: str) -> list[Cluster]:
         return [c for c in flat_clusters.values() if c["parent"] == parent_id]
 
-    def render_cluster(cluster, level_indent: str):
+    def render_cluster(cluster: Cluster, level_indent: str) -> None:
         cid = _cluster_id(cluster["id"])
         lines.append(f'{level_indent}subgraph "cluster_{cid}" {{')
         lines.append(f'{level_indent}    label="{cluster["label"]}";')
@@ -345,7 +363,7 @@ def _node_cluster_key(name: str, path: str, mode: str, depth: int) -> str:
     return ".".join(parts[: min(depth, len(parts))])
 
 
-def _cluster_parts(module, mode: str, root_path: str | None) -> list[str]:
+def _cluster_parts(module: Module, mode: str, root_path: str | None) -> list[str]:
     if mode == "path":
         if not root_path:
             return [module.name]
@@ -354,7 +372,7 @@ def _cluster_parts(module, mode: str, root_path: str | None) -> list[str]:
     return module.name.split(".")
 
 
-def _common_root(modules: list) -> str | None:
+def _common_root(modules: list[Module]) -> str | None:
     paths = [m.path for m in modules if m.path]
     if not paths:
         return None

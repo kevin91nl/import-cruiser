@@ -3,7 +3,7 @@ name: Publish to PyPI
 on:
   push:
     tags:
-      - "v*"
+      - "v*.*.*"
 
 permissions:
   contents: read
@@ -22,7 +22,10 @@ jobs:
           python-version: "3.12"
 
       - name: Install build tooling
-        run: python -m pip install --upgrade pip build
+        run: python -m pip install --upgrade pip build pre-commit
+
+      - name: Run pre-commit
+        run: pre-commit run --all-files
 
       - name: Build package
         run: python -m build

@@ -1,4 +1,5 @@
 """Dependency graph data structure for import_cruiser."""
+# pylint: disable=duplicate-code
 
 from __future__ import annotations
 
@@ -49,6 +50,7 @@ class DependencyGraph:
     def __init__(self) -> None:
         self._modules: dict[str, Module] = {}
         self._dependencies: list[Dependency] = []
+        self._dependency_pairs: set[tuple[str, str]] = set()
 
     # ------------------------------------------------------------------
     # Mutation
@@ -60,11 +62,10 @@ class DependencyGraph:
 
     def add_dependency(self, dep: Dependency) -> None:
         """Add a dependency edge (duplicate source→target pairs are ignored)."""
-        if not any(
-            d.source == dep.source and d.target == dep.target
-            for d in self._dependencies
-        ):
+        key = (dep.source, dep.target)
+        if key not in self._dependency_pairs:
             self._dependencies.append(dep)
+            self._dependency_pairs.add(key)
 
     # ------------------------------------------------------------------
     # Queries

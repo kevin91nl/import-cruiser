@@ -1,0 +1,10 @@
+[importlinter]
+root_package = import_cruiser
+
+[importlinter:contract:1]
+name = No tests imports in src
+type = forbidden
+source_modules =
+    import_cruiser
+forbidden_modules =
+    tests

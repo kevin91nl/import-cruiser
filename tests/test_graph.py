@@ -1,4 +1,5 @@
 """Tests for the DependencyGraph data structure."""
+# pylint: disable=duplicate-code
 
 from import_cruiser.graph import (
     Dependency,

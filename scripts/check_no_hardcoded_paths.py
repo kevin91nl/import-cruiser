@@ -14,7 +14,10 @@ PATTERNS = [
 
 def main() -> int:
     for path in ROOT.rglob("*.py"):
-        if "tests" in path.parts or "scripts" in path.parts or path.parts[0] == ".venv":
+        parts = set(path.parts)
+        if {"tests", "scripts"} & parts:
+            continue
+        if ".venv" in parts or "venv" in parts or "site-packages" in parts:
             continue
         text = path.read_text(encoding="utf-8", errors="ignore")
         for pattern in PATTERNS:
