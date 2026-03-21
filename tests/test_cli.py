@@ -1,0 +1,186 @@
+"""Integration tests for the CLI commands."""
+
+from __future__ import annotations
+
+import json
+import textwrap
+from pathlib import Path
+
+import pytest
+from click.testing import CliRunner
+
+from pydepend.cli import main
+
+
+@pytest.fixture()
+def sample_project(tmp_path: Path) -> Path:
+    """Create a minimal sample project for CLI testing."""
+    pkg = tmp_path / "mypkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("")
+    (pkg / "a.py").write_text("import mypkg.b\n")
+    (pkg / "b.py").write_text("import mypkg.c\n")
+    (pkg / "c.py").write_text("x = 1\n")
+    return tmp_path
+
+
+@pytest.fixture()
+def cyclic_project(tmp_path: Path) -> Path:
+    """Create a project with a circular dependency."""
+    (tmp_path / "x.py").write_text("import y\n")
+    (tmp_path / "y.py").write_text("import x\n")
+    return tmp_path
+
+
+class TestAnalyzeCommand:
+    def test_default_json_output(self, sample_project: Path) -> None:
+        runner = CliRunner()
+        result = runner.invoke(main, ["analyze", str(sample_project)])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert "modules" in data
+        assert "dependencies" in data
+        assert data["summary"]["modules"] >= 3
+
+    def test_dot_output(self, sample_project: Path) -> None:
+        runner = CliRunner()
+        result = runner.invoke(main, ["analyze", str(sample_project), "--format", "dot"])
+        assert result.exit_code == 0, result.output
+        assert "digraph" in result.output
+
+    def test_output_to_file(self, sample_project: Path, tmp_path: Path) -> None:
+        out_file = tmp_path / "out.json"
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["analyze", str(sample_project), "--output", str(out_file)]
+        )
+        assert result.exit_code == 0, result.output
+        assert out_file.exists()
+        data = json.loads(out_file.read_text())
+        assert "modules" in data
+
+    def test_cycle_detected(self, cyclic_project: Path) -> None:
+        runner = CliRunner()
+        result = runner.invoke(main, ["analyze", str(cyclic_project)])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["summary"]["cycles"] >= 1
+
+
+class TestValidateCommand:
+    def test_no_config(self, sample_project: Path) -> None:
+        runner = CliRunner()
+        result = runner.invoke(main, ["validate", str(sample_project)])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert "violations" in data
+        assert data["violations"] == []
+
+    def test_with_config_no_violations(self, sample_project: Path, tmp_path: Path) -> None:
+        config = {
+            "rules": [
+                {
+                    "name": "allow-all",
+                    "severity": "error",
+                    "from": {},
+                    "to": {},
+                    "allow": True,
+                }
+            ]
+        }
+        cfg_file = tmp_path / "cfg.json"
+        cfg_file.write_text(json.dumps(config))
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["validate", str(sample_project), "--config", str(cfg_file)]
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["violations"] == []
+
+    def test_with_config_violations(self, sample_project: Path, tmp_path: Path) -> None:
+        config = {
+            "rules": [
+                {
+                    "name": "no-b-to-c",
+                    "severity": "error",
+                    "from": {"path": "b$"},
+                    "to": {"path": "c$"},
+                    "allow": False,
+                }
+            ]
+        }
+        cfg_file = tmp_path / "cfg.json"
+        cfg_file.write_text(json.dumps(config))
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["validate", str(sample_project), "--config", str(cfg_file)]
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert len(data["violations"]) >= 1
+
+    def test_strict_flag_exits_nonzero_on_violation(
+        self, sample_project: Path, tmp_path: Path
+    ) -> None:
+        config = {
+            "rules": [
+                {
+                    "name": "no-deps",
+                    "severity": "error",
+                    "from": {},
+                    "to": {},
+                    "allow": False,
+                }
+            ]
+        }
+        cfg_file = tmp_path / "cfg.json"
+        cfg_file.write_text(json.dumps(config))
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["validate", str(sample_project), "--config", str(cfg_file), "--strict"],
+        )
+        assert result.exit_code != 0
+
+    def test_strict_flag_ok_without_violations(self, sample_project: Path) -> None:
+        runner = CliRunner()
+        result = runner.invoke(main, ["validate", str(sample_project), "--strict"])
+        assert result.exit_code == 0
+
+    def test_invalid_config_file(self, sample_project: Path, tmp_path: Path) -> None:
+        bad_cfg = tmp_path / "bad.json"
+        bad_cfg.write_text("{not valid json")
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["validate", str(sample_project), "--config", str(bad_cfg)]
+        )
+        assert result.exit_code != 0
+
+
+class TestExportCommand:
+    def test_export_dot(self, sample_project: Path) -> None:
+        runner = CliRunner()
+        result = runner.invoke(main, ["export", str(sample_project)])
+        assert result.exit_code == 0, result.output
+        assert "digraph" in result.output
+
+    def test_export_to_file(self, sample_project: Path, tmp_path: Path) -> None:
+        out_file = tmp_path / "graph.dot"
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["export", str(sample_project), "--output", str(out_file)]
+        )
+        assert result.exit_code == 0
+        assert out_file.exists()
+        assert "digraph" in out_file.read_text()
+
+
+class TestVersionCommand:
+    def test_version_flag(self) -> None:
+        from pydepend import __version__
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["--version"])
+        assert result.exit_code == 0
+        assert __version__ in result.output
