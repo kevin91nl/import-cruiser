@@ -7,8 +7,6 @@ from .exporter import (
     export_dot,
     export_html,
     export_json,
-    export_matrix_html,
-    export_matrix_json,
     export_svg,
 )
 from .graph import (
@@ -36,8 +34,6 @@ __all__ = [
     "export_dot",
     "export_html",
     "export_json",
-    "export_matrix_html",
-    "export_matrix_json",
     "export_svg",
     "filter_graph",
     "load_config",

@@ -50,7 +50,7 @@ poetry install
 
 ## CLI Usage
 
-### Quick start: generate graph/matrix outputs
+### Quick start: generate HTML/SVG for your repo
 
 Use this when you want a graph fast, without setting up rules first.
 
@@ -66,12 +66,6 @@ import-cruiser export . --format svg --output deps.svg
 
 # 4) (Optional) Export DOT too, for custom Graphviz rendering
 import-cruiser export . --format dot --output deps.dot
-
-# 5) (Optional) Export dependency matrix as interactive HTML (great for big graphs)
-import-cruiser export . --format matrix-html --output deps-matrix.html
-
-# 6) (Optional) Export dependency matrix as JSON
-import-cruiser export . --format matrix-json --output deps-matrix.json
 ```
 
 Useful filters for larger repos:
@@ -84,7 +78,7 @@ import-cruiser export . --format html --include-path '^src/' --exclude-path '/te
 import-cruiser export . --format svg --include '^myapp\.' --output deps-myapp.svg
 ```
 
-Tip: Graph HTML is best for visual exploration (hover/pan/zoom). Matrix HTML is often better for very large graphs.
+Tip: HTML is best for exploration (hover/pan/zoom), SVG is best for embedding in docs.
 
 ### CI usage (GitHub Actions)
 

@@ -1,23 +1,33 @@
 digraph "import_cruiser" {
-    graph [rankdir=LR, splines=curved, overlap=false, nodesep=0.16, ranksep=0.18, fontname="Helvetica-bold", fontsize=9, style="rounded,bold,filled", fillcolor="#FFFFFF", compound=true, pack=true, packmode="array_u", newrank=true, ratio="compress", pad=0.35, margin=0.35];
-    node [shape=box, style="rounded,filled", height=0.2, color="black", fillcolor="#FFFFCC", fontcolor="black", fontname="Helvetica", fontsize=9];
-    edge [arrowhead="normal", arrowsize=0.6, penwidth=2.0, color="#00000033", fontname="Helvetica", fontsize=9];
+    graph [rankdir=TB, splines=curved, overlap=false, ranksep=0.75, nodesep=0.35, pack=true, packmode="clust", newrank=true, compound=true, ratio="compress", fontname="Helvetica", fontsize=10, bgcolor="white", pad=0.35, margin=0.35];
+    node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, color="#2F2F2F", fillcolor="#DFF3F8"];
+    edge [color="#B0B0B0", arrowsize=0.7];
 
-    subgraph "cluster_import_cruiser" {
-        label="import_cruiser";
+    subgraph "cluster_src" {
+        label="src";
         margin=40;
         color="black";
         penwidth=1.0;
         style="rounded,bold";
         fontname="Helvetica";
         fontsize=9;
-        "import_cruiser.analyzer" [label="analyzer", tooltip="/Users/kevin/Documents/GitHub/pydepend/src/import_cruiser/analyzer.py"];
-        "import_cruiser.cli" [label="cli", tooltip="/Users/kevin/Documents/GitHub/pydepend/src/import_cruiser/cli.py"];
-        "import_cruiser.config" [label="config", tooltip="/Users/kevin/Documents/GitHub/pydepend/src/import_cruiser/config.py"];
-        "import_cruiser.detector" [label="detector", tooltip="/Users/kevin/Documents/GitHub/pydepend/src/import_cruiser/detector.py"];
-        "import_cruiser.exporter" [label="exporter", tooltip="/Users/kevin/Documents/GitHub/pydepend/src/import_cruiser/exporter.py"];
-        "import_cruiser.graph" [label="graph", tooltip="/Users/kevin/Documents/GitHub/pydepend/src/import_cruiser/graph.py"];
-        "import_cruiser.validator" [label="validator", tooltip="/Users/kevin/Documents/GitHub/pydepend/src/import_cruiser/validator.py"];
+        "__cluster_anchor_src" [label="", shape=point, width=0, height=0, style=invis];
+        subgraph "cluster_src_import_cruiser" {
+            label="import_cruiser";
+            margin=40;
+            color="black";
+            penwidth=1.0;
+            style="rounded,bold";
+            fontname="Helvetica";
+            fontsize=9;
+            "import_cruiser.analyzer" [label="analyzer.py", tooltip="/Users/kevin/Documents/GitHub/pydepend/src/import_cruiser/analyzer.py"];
+            "import_cruiser.cli" [label="cli.py", tooltip="/Users/kevin/Documents/GitHub/pydepend/src/import_cruiser/cli.py"];
+            "import_cruiser.config" [label="config.py", tooltip="/Users/kevin/Documents/GitHub/pydepend/src/import_cruiser/config.py"];
+            "import_cruiser.detector" [label="detector.py", tooltip="/Users/kevin/Documents/GitHub/pydepend/src/import_cruiser/detector.py"];
+            "import_cruiser.exporter" [label="exporter.py", tooltip="/Users/kevin/Documents/GitHub/pydepend/src/import_cruiser/exporter.py"];
+            "import_cruiser.graph" [label="graph.py", tooltip="/Users/kevin/Documents/GitHub/pydepend/src/import_cruiser/graph.py"];
+            "import_cruiser.validator" [label="validator.py", tooltip="/Users/kevin/Documents/GitHub/pydepend/src/import_cruiser/validator.py"];
+        }
     }
 
     "import_cruiser.analyzer" -> "import_cruiser.graph";

@@ -20,20 +20,18 @@ from import_cruiser.detector import detect_cycles
 from import_cruiser.exporter import (
     _add_svg_padding,
     _build_clusters,
-    _non_empty_clusters,
     _dot_node_lines,
+    _non_empty_clusters,
+    _render_cluster_tree,
     _edges_in_cycles,
     _node_cluster_key,
     _cluster_parts,
     _common_root as exporter_common_root,
     _html_with_fallback,
-    _render_cluster_tree,
     _render_dot,
     _style_attrs,
     export_dot,
     export_html,
-    export_matrix_html,
-    export_matrix_json,
     export_svg,
 )
 from import_cruiser.graph import (
@@ -128,10 +126,6 @@ def test_cli_analyze_svg_and_html_branches(
     monkeypatch.setattr(cli.Analyzer, "analyze", lambda self: graph)
     monkeypatch.setattr(cli, "_export_svg", lambda *args, **kwargs: "<svg/>")
     monkeypatch.setattr(cli, "export_html", lambda *args, **kwargs: "<html/>")
-    monkeypatch.setattr(cli, "export_matrix_html", lambda *args, **kwargs: "<matrix/>")
-    monkeypatch.setattr(
-        cli, "export_matrix_json", lambda *args, **kwargs: '{"matrix":true}'
-    )
 
     runner = CliRunner()
     svg_result = runner.invoke(
@@ -140,21 +134,11 @@ def test_cli_analyze_svg_and_html_branches(
     html_result = runner.invoke(
         cli.main, ["analyze", str(mini_project), "--format", "html"]
     )
-    matrix_html_result = runner.invoke(
-        cli.main, ["analyze", str(mini_project), "--format", "matrix-html"]
-    )
-    matrix_json_result = runner.invoke(
-        cli.main, ["analyze", str(mini_project), "--format", "matrix-json"]
-    )
 
     assert svg_result.exit_code == 0
     assert "<svg/>" in svg_result.output
     assert html_result.exit_code == 0
     assert "<html/>" in html_result.output
-    assert matrix_html_result.exit_code == 0
-    assert "<matrix/>" in matrix_html_result.output
-    assert matrix_json_result.exit_code == 0
-    assert '"matrix":true' in matrix_json_result.output
 
 
 def test_cli_export_svg_and_html_branches(
@@ -164,10 +148,6 @@ def test_cli_export_svg_and_html_branches(
     monkeypatch.setattr(cli.Analyzer, "analyze", lambda self: graph)
     monkeypatch.setattr(cli, "_export_svg", lambda *args, **kwargs: "<svg/>")
     monkeypatch.setattr(cli, "export_html", lambda *args, **kwargs: "<html/>")
-    monkeypatch.setattr(cli, "export_matrix_html", lambda *args, **kwargs: "<matrix/>")
-    monkeypatch.setattr(
-        cli, "export_matrix_json", lambda *args, **kwargs: '{"matrix":true}'
-    )
 
     runner = CliRunner()
     svg_result = runner.invoke(
@@ -176,21 +156,11 @@ def test_cli_export_svg_and_html_branches(
     html_result = runner.invoke(
         cli.main, ["export", str(mini_project), "--format", "html"]
     )
-    matrix_html_result = runner.invoke(
-        cli.main, ["export", str(mini_project), "--format", "matrix-html"]
-    )
-    matrix_json_result = runner.invoke(
-        cli.main, ["export", str(mini_project), "--format", "matrix-json"]
-    )
 
     assert svg_result.exit_code == 0
     assert "<svg/>" in svg_result.output
     assert html_result.exit_code == 0
     assert "<html/>" in html_result.output
-    assert matrix_html_result.exit_code == 0
-    assert "<matrix/>" in matrix_html_result.output
-    assert matrix_json_result.exit_code == 0
-    assert '"matrix":true' in matrix_json_result.output
 
 
 def test_cli_helper_edge_cases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -254,36 +224,6 @@ def test_apply_graph_options_archi_and_auto_cluster() -> None:
     assert cluster_mode == "path"
     assert style == "archi"
     assert cluster_depth == 20
-    assert edge_mode == "cluster"
-
-
-def test_apply_graph_options_cruiser_auto_cluster_for_large_graph() -> None:
-    graph = DependencyGraph()
-    base = Path(__file__).resolve().parents[1]
-    for idx in range(201):
-        graph.add_module(
-            Module(name=f"pkg.m{idx}", path=str(base / "src" / "pkg" / f"m{idx}.py"))
-        )
-    graph.add_dependency(Dependency(source="pkg.m0", target="pkg.m1", line=1))
-
-    _, _, _, _, _, _, edge_mode = cli._apply_graph_options(
-        graph,
-        include=[],
-        exclude=[],
-        include_paths=[],
-        exclude_paths=[],
-        focus=[],
-        focus_depth=1,
-        collapse_depth=0,
-        cluster_depth=3,
-        cluster_mode="module",
-        aggregate_depth=0,
-        leaf_patterns=[],
-        layout="dot",
-        rankdir="LR",
-        style="cruiser",
-        edge_mode="auto",
-    )
     assert edge_mode == "cluster"
 
 
@@ -492,40 +432,6 @@ def test_exporter_error_and_style_paths(monkeypatch: pytest.MonkeyPatch) -> None
     )
     assert "Graphviz rendering failed" in export_html(graph)
 
-    with pytest.raises(RuntimeError):
-        export_svg(graph, edge_mode="node")
-
-    calls = {"n": 0}
-
-    def _render_dot_fail_then_ok(*args, **kwargs):
-        calls["n"] += 1
-        if calls["n"] == 1:
-            raise RuntimeError("first")
-        return "<svg/>"
-
-    monkeypatch.setattr("import_cruiser.exporter._render_dot", _render_dot_fail_then_ok)
-    assert export_svg(graph, edge_mode="cluster") == "<svg/>"
-    assert "<svg/>" in export_html(graph, edge_mode="cluster")
-
-    calls_html = {"n": 0}
-
-    def _render_dot_fail_then_ok_html(*args, **kwargs):
-        calls_html["n"] += 1
-        if calls_html["n"] == 1:
-            raise RuntimeError("first-html")
-        return "<svg/>"
-
-    monkeypatch.setattr(
-        "import_cruiser.exporter._render_dot", _render_dot_fail_then_ok_html
-    )
-    assert "<svg/>" in export_html(graph, edge_mode="cluster")
-
-    monkeypatch.setattr(
-        "import_cruiser.exporter._render_dot",
-        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("always")),
-    )
-    assert "Graphviz rendering failed" in export_html(graph, edge_mode="cluster")
-
     assert _style_attrs("archi", "LR")
     assert _style_attrs("cruiser", "LR")
     assert _style_attrs("navigator", "LR")
@@ -587,27 +493,21 @@ def test_exporter_error_and_style_paths(monkeypatch: pytest.MonkeyPatch) -> None
         },
     }
     assert _non_empty_clusters(empty_flat) == {"a", "a.c"}
+    skipped_lines = _render_cluster_tree(
+        {"a": empty_flat["a"]},
+        empty_flat,
+        set(),
+        "    ",
+        "default",
+        allowed={"a.c"},
+    )
+    assert skipped_lines == [""]
 
     monkeypatch.setattr(
         "import_cruiser.exporter.os.path.commonpath",
         lambda *a, **k: (_ for _ in ()).throw(ValueError("x")),
     )
     assert exporter_common_root([Module("a", "/a.py")]) is None
-
-    assert "dependency matrix" in export_matrix_html(graph)
-    matrix_json = export_matrix_json(graph)
-    assert '"modules"' in matrix_json
-    assert '"matrix"' in matrix_json
-
-    tree = _render_cluster_tree(
-        {"a": {"id": "a", "label": "a", "parent": None, "modules": []}},
-        {"a": {"id": "a", "label": "a", "parent": None, "modules": []}},
-        set(),
-        "    ",
-        "module",
-        set(),
-    )
-    assert not any("subgraph" in line for line in tree)
 
 
 def test_exporter_common_root_src_parent(tmp_path: Path) -> None:

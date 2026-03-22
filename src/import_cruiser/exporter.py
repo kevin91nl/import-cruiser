@@ -7,7 +7,6 @@ import json
 import os
 import re
 import subprocess  # nosec B404
-from html import escape
 from pathlib import Path
 from typing import Protocol, TypedDict, cast
 
@@ -70,259 +69,6 @@ def export_json(
         },
     )
     return json.dumps(data, indent=2)
-
-
-def export_matrix_json(graph: DependencyGraph) -> str:
-    """Return a JSON adjacency matrix representation."""
-    modules = sorted(m.name for m in graph.modules)
-    index_by_name = {name: idx for idx, name in enumerate(modules)}
-    matrix = [[0 for _ in modules] for _ in modules]
-    for dep in graph.dependencies:
-        src_idx = index_by_name.get(dep.source)
-        tgt_idx = index_by_name.get(dep.target)
-        if src_idx is not None and tgt_idx is not None:
-            matrix[src_idx][tgt_idx] = 1
-    payload = cast(
-        JSONDict,
-        {
-            "summary": {
-                "modules": len(modules),
-                "dependencies": len(graph.dependencies),
-            },
-            "modules": modules,
-            "matrix": matrix,
-        },
-    )
-    return json.dumps(payload, indent=2)
-
-
-def export_matrix_html(
-    graph: DependencyGraph, graph_name: str = "import_cruiser"
-) -> str:
-    """Return an interactive HTML dependency matrix."""
-    modules = sorted(m.name for m in graph.modules)
-    dep_set = {(d.source, d.target) for d in graph.dependencies}
-    index_by_name = {name: idx for idx, name in enumerate(modules)}
-
-    rows: list[str] = []
-    for src in modules:
-        src_idx = index_by_name[src]
-        cells: list[str] = []
-        for tgt in modules:
-            tgt_idx = index_by_name[tgt]
-            has_dep = (src, tgt) in dep_set
-            klass = "diag" if src == tgt else ("hit" if has_dep else "miss")
-            symbol = "•" if has_dep else ""
-            aria = f"{src} -> {tgt}" if has_dep else ""
-            cells.append(
-                f'<td class="{klass}" data-row="{src_idx}" data-col="{tgt_idx}" '
-                f'data-hit="{1 if has_dep else 0}" title="{escape(aria)}">{symbol}</td>'
-            )
-        rows.append(
-            f'<tr><th scope="row" data-row="{src_idx}">{escape(src)}</th>'
-            + "".join(cells)
-            + "</tr>"
-        )
-
-    cols = "".join(
-        f'<th scope="col" data-col="{idx}" title="{escape(name)}">{escape(name)}</th>'
-        for idx, name in enumerate(modules)
-    )
-    count = len(modules)
-    display_title = _display_graph_title(graph_name)
-    return f"""<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{escape(display_title)} matrix</title>
-  <style>
-    :root {{
-      color-scheme: only light;
-    }}
-    body {{
-      margin: 0;
-      font-family: Helvetica, Arial, sans-serif;
-      background: #f6f7f9;
-      color: #111827;
-    }}
-    header {{
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      flex-wrap: wrap;
-      padding: 6px 8px;
-      background: #1f2937;
-      color: #f9fafb;
-      font-size: 12px;
-    }}
-    #filter {{
-      min-width: 220px;
-      padding: 4px 7px;
-      border: 1px solid #94a3b8;
-      border-radius: 6px;
-      font-size: 12px;
-    }}
-    #summary {{
-      color: #d1d5db;
-      font-size: 11px;
-    }}
-    .wrap {{
-      height: calc(100vh - 42px);
-      overflow: auto;
-      background: #fff;
-      border-top: 1px solid #d1d5db;
-    }}
-    table {{
-      border-collapse: collapse;
-      font-size: 11px;
-      width: max-content;
-      min-width: 100%;
-    }}
-    thead th {{
-      position: sticky;
-      top: 0;
-      z-index: 3;
-      background: #f3f4f6;
-      border-bottom: 1px solid #d1d5db;
-      writing-mode: vertical-rl;
-      transform: rotate(180deg);
-      text-align: left;
-      height: 130px;
-      white-space: nowrap;
-      padding: 4px 3px;
-      max-width: 28px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }}
-    tbody th {{
-      position: sticky;
-      left: 0;
-      z-index: 2;
-      background: #f9fafb;
-      border-right: 1px solid #d1d5db;
-      text-align: left;
-      white-space: nowrap;
-      max-width: 360px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      padding: 4px 8px;
-    }}
-    th.corner {{
-      position: sticky;
-      top: 0;
-      left: 0;
-      z-index: 4;
-      writing-mode: horizontal-tb;
-      transform: none;
-      height: auto;
-      max-width: none;
-    }}
-    td {{
-      width: 18px;
-      min-width: 18px;
-      height: 18px;
-      text-align: center;
-      border: 1px solid #eef2f7;
-      color: #111827;
-      font-size: 13px;
-      line-height: 1;
-      user-select: none;
-    }}
-    td.miss {{
-      background: #fff;
-    }}
-    td.hit {{
-      background: #2563eb;
-      color: #fff;
-    }}
-    td.diag {{
-      background: #e5e7eb;
-    }}
-    .highlight {{
-      outline: 1px solid #f59e0b;
-      outline-offset: -1px;
-    }}
-    .hidden {{
-      display: none;
-    }}
-  </style>
-</head>
-<body>
-  <header>
-    <strong>{escape(display_title)} dependency matrix</strong>
-    <input id="filter" type="search" placeholder="Filter modules (substring)">
-    <span id="summary">{count} modules</span>
-  </header>
-  <div class="wrap">
-    <table id="matrix">
-      <thead>
-        <tr>
-          <th class="corner">from \\\\ to</th>
-          {cols}
-        </tr>
-      </thead>
-      <tbody>
-        {"".join(rows)}
-      </tbody>
-    </table>
-  </div>
-  <script>
-    const filterInput = document.getElementById('filter');
-    const summary = document.getElementById('summary');
-    const rowHeaders = [...document.querySelectorAll('tbody th[data-row]')];
-    const colHeaders = [...document.querySelectorAll('thead th[data-col]')];
-    const cells = [...document.querySelectorAll('tbody td[data-row]')];
-
-    const updateFilter = () => {{
-      const q = filterInput.value.trim().toLowerCase();
-      const visibleRows = new Set();
-      const visibleCols = new Set();
-      rowHeaders.forEach((th) => {{
-        const i = Number(th.dataset.row);
-        const keep = !q || th.textContent.toLowerCase().includes(q);
-        th.classList.toggle('hidden', !keep);
-        if (keep) visibleRows.add(i);
-      }});
-      colHeaders.forEach((th) => {{
-        const i = Number(th.dataset.col);
-        const keep = !q || th.title.toLowerCase().includes(q);
-        th.classList.toggle('hidden', !keep);
-        if (keep) visibleCols.add(i);
-      }});
-      cells.forEach((td) => {{
-        const r = Number(td.dataset.row);
-        const c = Number(td.dataset.col);
-        const keep = visibleRows.has(r) && visibleCols.has(c);
-        td.classList.toggle('hidden', !keep);
-      }});
-      summary.textContent = `${{visibleRows.size}} / {count} modules`;
-    }};
-
-    rowHeaders.forEach((th) => {{
-      th.addEventListener('mouseenter', () => {{
-        const row = th.dataset.row;
-        cells.forEach((td) => td.classList.toggle('highlight', td.dataset.row === row));
-      }});
-      th.addEventListener('mouseleave', () => {{
-        cells.forEach((td) => td.classList.remove('highlight'));
-      }});
-    }});
-    colHeaders.forEach((th) => {{
-      th.addEventListener('mouseenter', () => {{
-        const col = th.dataset.col;
-        cells.forEach((td) => td.classList.toggle('highlight', td.dataset.col === col));
-      }});
-      th.addEventListener('mouseleave', () => {{
-        cells.forEach((td) => td.classList.remove('highlight'));
-      }});
-    }});
-
-    filterInput.addEventListener('input', updateFilter);
-    updateFilter();
-  </script>
-</body>
-</html>"""
 
 
 def export_dot(
@@ -464,23 +210,7 @@ def export_svg(
         style=style,
         edge_mode=edge_mode,
     )
-    try:
-        svg = _render_dot(dot, "svg", engine=engine)
-    except RuntimeError:
-        if edge_mode == "cluster":
-            dot = export_dot(
-                graph,
-                graph_name=graph_name,
-                violations=violations,
-                rankdir=rankdir,
-                cluster_depth=cluster_depth,
-                cluster_mode=cluster_mode,
-                style=style,
-                edge_mode="node",
-            )
-            svg = _render_dot(dot, "svg", engine=engine)
-        else:
-            raise
+    svg = _render_dot(dot, "svg", engine=engine)
     return _add_svg_padding(svg)
 
 
@@ -509,24 +239,7 @@ def export_html(
         svg = _add_svg_padding(_render_dot(dot, "svg", engine=engine))
         body = _html_with_svg(svg, graph_name)
     except RuntimeError as exc:
-        if edge_mode == "cluster":
-            try:
-                dot = export_dot(
-                    graph,
-                    graph_name=graph_name,
-                    violations=violations,
-                    rankdir=rankdir,
-                    cluster_depth=cluster_depth,
-                    cluster_mode=cluster_mode,
-                    style=style,
-                    edge_mode="node",
-                )
-                svg = _add_svg_padding(_render_dot(dot, "svg", engine=engine))
-                body = _html_with_svg(svg, graph_name)
-            except RuntimeError as fallback_exc:
-                body = _html_with_fallback(dot, graph_name, str(fallback_exc))
-        else:
-            body = _html_with_fallback(dot, graph_name, str(exc))
+        body = _html_with_fallback(dot, graph_name, str(exc))
     return body
 
 
@@ -941,26 +654,6 @@ def _html_with_svg(svg: str, title: str) -> str:
             margin: 4px 0 8px 16px;
             padding: 0;
         }}
-        #controls {{
-            position: absolute;
-            left: 12px;
-            top: 12px;
-            display: flex;
-            gap: 6px;
-            z-index: 11;
-        }}
-        #controls button {{
-            border: 1px solid #cbd5f5;
-            background: rgba(255, 255, 255, 0.96);
-            color: #1f2937;
-            padding: 6px 8px;
-            border-radius: 6px;
-            font-size: 12px;
-            cursor: pointer;
-        }}
-        #controls button:hover {{
-            background: #eef2ff;
-        }}
         .dimmed {{
             opacity: 0.14;
             transition: opacity 0.08s ease-out;
@@ -990,12 +683,6 @@ def _html_with_svg(svg: str, title: str) -> str:
 <body>
     <header>{display_title}</header>
     <div class="canvas" id="canvas">
-        <div id="controls">
-            <button id="zoom-in" type="button">+</button>
-            <button id="zoom-out" type="button">-</button>
-            <button id="zoom-reset" type="button">Reset</button>
-            <button id="zoom-fit" type="button">Fit</button>
-        </div>
         <div class="viewport" id="viewport">{svg}</div>
         <aside id="inspector">
             <h4>Context</h4>
@@ -1007,10 +694,6 @@ def _html_with_svg(svg: str, title: str) -> str:
         const viewport = document.getElementById('viewport');
         const svg = viewport.querySelector('svg');
         const inspector = document.getElementById('inspector');
-        const zoomInButton = document.getElementById('zoom-in');
-        const zoomOutButton = document.getElementById('zoom-out');
-        const zoomResetButton = document.getElementById('zoom-reset');
-        const zoomFitButton = document.getElementById('zoom-fit');
         let scale = 1;
         let originX = 0;
         let originY = 0;
@@ -1018,8 +701,6 @@ def _html_with_svg(svg: str, title: str) -> str:
         let startX = 0;
         let startY = 0;
         let pinned = null;
-        const MIN_SCALE = 0.2;
-        const MAX_SCALE = 3;
 
         const esc = (text) => String(text)
             .replaceAll('&', '&amp;')
@@ -1058,52 +739,15 @@ def _html_with_svg(svg: str, title: str) -> str:
             viewport.style.transform = `translate(${{originX}}px, ${{originY}}px) scale(${{scale}})`;
         }};
 
-        const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-
-        const getViewBox = () => {{
-            if (!svg) return null;
-            if (svg.viewBox && svg.viewBox.baseVal && svg.viewBox.baseVal.width && svg.viewBox.baseVal.height) {{
-                return svg.viewBox.baseVal;
-            }}
-            const attr = svg.getAttribute('viewBox');
-            if (attr) {{
-                const parts = attr.split(/\\s+/).map(Number);
-                if (parts.length === 4 && parts.every((n) => Number.isFinite(n))) {{
-                    return {{ x: parts[0], y: parts[1], width: parts[2], height: parts[3] }};
-                }}
-            }}
-            const width = parseFloat(svg.getAttribute('width') || '0');
-            const height = parseFloat(svg.getAttribute('height') || '0');
-            if (width > 0 && height > 0) {{
-                svg.setAttribute('viewBox', `0 0 ${{width}} ${{height}}`);
-                return {{ x: 0, y: 0, width, height }};
-            }}
-            return null;
-        }};
-
         const fitToView = () => {{
-            const vb = getViewBox();
-            if (!vb || !vb.width || !vb.height) return;
+            if (!svg || !svg.viewBox || !svg.viewBox.baseVal) return;
+            const vb = svg.viewBox.baseVal;
+            if (!vb.width || !vb.height) return;
             const scaleX = canvas.clientWidth / vb.width;
             const scaleY = canvas.clientHeight / vb.height;
-            const fitScale = Math.min(scaleX, scaleY) * 0.65;
-            scale = fitScale;
-            const baseOriginX = (canvas.clientWidth - vb.width * scale) / 2 - vb.x * scale;
-            const baseOriginY = (canvas.clientHeight - vb.height * scale) / 2 - vb.y * scale;
-            originX = baseOriginX;
-            originY = baseOriginY;
-            applyTransform();
-            const graphGroup = svg.querySelector('g[id^="graph"]') || svg.querySelector('g');
-            if (!graphGroup) return;
-            const canvasRect = canvas.getBoundingClientRect();
-            const graphRect = graphGroup.getBoundingClientRect();
-            if (!graphRect.width || !graphRect.height) return;
-            const dx =
-                canvasRect.left + canvasRect.width / 2 - (graphRect.left + graphRect.width / 2);
-            const dy =
-                canvasRect.top + canvasRect.height / 2 - (graphRect.top + graphRect.height / 2);
-            originX = baseOriginX + dx;
-            originY = baseOriginY + dy;
+            scale = Math.min(scaleX, scaleY) * 0.90;
+            originX = (canvas.clientWidth - vb.width * scale) / 2;
+            originY = (canvas.clientHeight - vb.height * scale) / 2;
             applyTransform();
         }};
 
@@ -1236,7 +880,7 @@ def _html_with_svg(svg: str, title: str) -> str:
         canvas.addEventListener('wheel', (event) => {{
             event.preventDefault();
             const delta = Math.sign(event.deltaY) * -0.1;
-            scale = clamp(scale + delta, MIN_SCALE, MAX_SCALE);
+            scale = Math.min(3, Math.max(0.2, scale + delta));
             applyTransform();
         }});
 
@@ -1258,20 +902,7 @@ def _html_with_svg(svg: str, title: str) -> str:
         }});
 
         window.addEventListener('resize', fitToView);
-        zoomInButton.addEventListener('click', () => {{
-            scale = clamp(scale + 0.1, MIN_SCALE, MAX_SCALE);
-            applyTransform();
-        }});
-        zoomOutButton.addEventListener('click', () => {{
-            scale = clamp(scale - 0.1, MIN_SCALE, MAX_SCALE);
-            applyTransform();
-        }});
-        zoomResetButton.addEventListener('click', () => {{
-            fitToView();
-        }});
-        zoomFitButton.addEventListener('click', fitToView);
         fitToView();
-        window.addEventListener('load', fitToView, {{ once: true }});
     </script>
 </body>
 </html>"""

@@ -6,6 +6,6 @@ SELF_GRAPH_EXCLUDE := __init__\.py$$|/tests/
 .PHONY: self-graph
 self-graph:
 	@mkdir -p $(SELF_GRAPH_DIR)
-	PYTHONPATH=src python3 -m import_cruiser.cli export . --format dot --style default --cluster-mode module --include-path '$(SELF_GRAPH_INCLUDE)' --exclude-path '$(SELF_GRAPH_EXCLUDE)' --output $(SELF_GRAPH_BASE).dot
-	PYTHONPATH=src python3 -m import_cruiser.cli export . --format html --style default --cluster-mode module --include-path '$(SELF_GRAPH_INCLUDE)' --exclude-path '$(SELF_GRAPH_EXCLUDE)' --output $(SELF_GRAPH_BASE).html
-	PYTHONPATH=src python3 -m import_cruiser.cli export . --format svg --style default --cluster-mode module --include-path '$(SELF_GRAPH_INCLUDE)' --exclude-path '$(SELF_GRAPH_EXCLUDE)' --output $(SELF_GRAPH_BASE).svg
+	PYTHONPATH=src python3 -m import_cruiser.cli export . --format dot --include-path '$(SELF_GRAPH_INCLUDE)' --exclude-path '$(SELF_GRAPH_EXCLUDE)' --output $(SELF_GRAPH_BASE).dot
+	PYTHONPATH=src python3 -m import_cruiser.cli export . --format html --include-path '$(SELF_GRAPH_INCLUDE)' --exclude-path '$(SELF_GRAPH_EXCLUDE)' --output $(SELF_GRAPH_BASE).html
+	PYTHONPATH=src python3 -m import_cruiser.cli export . --format svg --include-path '$(SELF_GRAPH_INCLUDE)' --exclude-path '$(SELF_GRAPH_EXCLUDE)' --output $(SELF_GRAPH_BASE).svg

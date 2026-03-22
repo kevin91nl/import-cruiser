@@ -18,8 +18,6 @@ from import_cruiser.exporter import (
     export_dot,
     export_html,
     export_json,
-    export_matrix_html,
-    export_matrix_json,
     export_svg,
 )
 from import_cruiser.graph import (
@@ -56,10 +54,7 @@ def main() -> None:
     "--format",
     "-f",
     "fmt",
-    type=click.Choice(
-        ["json", "dot", "svg", "html", "matrix-html", "matrix-json"],
-        case_sensitive=False,
-    ),
+    type=click.Choice(["json", "dot", "svg", "html"], case_sensitive=False),
     default="json",
     show_default=True,
     help="Output format.",
@@ -82,7 +77,7 @@ def main() -> None:
     type=click.Choice(
         ["default", "archi", "cruiser", "navigator"], case_sensitive=False
     ),
-    default="default",
+    default="cruiser",
     show_default=True,
     help="Graph styling preset.",
 )
@@ -241,10 +236,6 @@ def cmd_analyze(
             style=style,
             edge_mode=edge_mode,
         )
-    elif fmt == "matrix-html":
-        result = export_matrix_html(graph)
-    elif fmt == "matrix-json":
-        result = export_matrix_json(graph)
     else:
         cycles = detect_cycles(graph)
         result = export_json(graph, cycles=cycles)
@@ -309,10 +300,11 @@ def cmd_validate(
     cycles = detect_cycles(graph)
     rules = _extract_rules(config)
     violations = Validator(rules).validate(graph)
-    violations_like = cast(list[ViolationLike], violations)
 
     if output_format == "json":
-        result = export_json(graph, violations=violations_like, cycles=cycles)
+        result = export_json(
+            graph, violations=cast(list[ViolationLike], violations), cycles=cycles
+        )
     else:
         result = _format_lint_output(
             violations,
@@ -351,9 +343,7 @@ def cmd_validate(
     "--format",
     "-f",
     "fmt",
-    type=click.Choice(
-        ["dot", "svg", "html", "matrix-html", "matrix-json"], case_sensitive=False
-    ),
+    type=click.Choice(["dot", "svg", "html"], case_sensitive=False),
     default="dot",
     show_default=True,
     help="Export format.",
@@ -370,7 +360,7 @@ def cmd_validate(
     type=click.Choice(
         ["default", "archi", "cruiser", "navigator"], case_sensitive=False
     ),
-    default="default",
+    default="cruiser",
     show_default=True,
     help="Graph styling preset.",
 )
@@ -509,11 +499,10 @@ def cmd_export(
         )
     )
     violations = _load_violations(config_path, graph)
-    violations_like = cast(list[ViolationLike], violations)
     if fmt == "dot":
         result = export_dot(
             graph,
-            violations=violations_like,
+            violations=cast(list[ViolationLike], violations),
             rankdir=rankdir,
             cluster_depth=cluster_depth,
             cluster_mode=cluster_mode,
@@ -523,7 +512,7 @@ def cmd_export(
     elif fmt == "svg":
         result = _export_svg(
             graph,
-            violations,
+            cast(list[ViolationLike], violations),
             layout=layout,
             rankdir=rankdir,
             cluster_depth=cluster_depth,
@@ -531,10 +520,10 @@ def cmd_export(
             style=style,
             edge_mode=edge_mode,
         )
-    elif fmt == "html":
+    else:
         result = export_html(
             graph,
-            violations=violations_like,
+            violations=cast(list[ViolationLike], violations),
             engine=layout,
             rankdir=rankdir,
             cluster_depth=cluster_depth,
@@ -542,10 +531,6 @@ def cmd_export(
             style=style,
             edge_mode=edge_mode,
         )
-    elif fmt == "matrix-html":
-        result = export_matrix_html(graph)
-    else:
-        result = export_matrix_json(graph)
     _write_output(result, output)
 
 
@@ -555,9 +540,10 @@ def cmd_export(
 
 
 def _write_output(content: str, output: Optional[str]) -> None:
+    if content and not content.endswith("\n"):
+        content += "\n"
     if output:
-        payload = content if content.endswith("\n") else content + "\n"
-        Path(output).write_text(payload, encoding="utf-8")
+        Path(output).write_text(content, encoding="utf-8")
         click.echo(f"Output written to {output}", err=True)
     else:
         click.echo(content)
@@ -637,10 +623,7 @@ def _apply_graph_options(
         if cluster_depth == 3:
             cluster_depth = 5
         if edge_mode == "auto":
-            if len(filtered.modules) > 200 or len(filtered.dependencies) > 400:
-                edge_mode = "cluster"
-            else:
-                edge_mode = "node"
+            edge_mode = "node"
     if edge_mode == "auto":
         edge_mode = "node"
 
@@ -650,7 +633,7 @@ def _apply_graph_options(
 
 def _export_svg(
     graph: DependencyGraph,
-    violations: list[Violation] | None = None,
+    violations: list[ViolationLike] | None = None,
     layout: str = "dot",
     rankdir: str = "LR",
     cluster_depth: int = 3,
@@ -660,11 +643,10 @@ def _export_svg(
 ) -> str:
     if violations is None:
         violations = []
-    violations_like = cast(list[ViolationLike], violations)
     try:
         return export_svg(
             graph,
-            violations=violations_like,
+            violations=violations,
             engine=layout,
             rankdir=rankdir,
             cluster_depth=cluster_depth,
