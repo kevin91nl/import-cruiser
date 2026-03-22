@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 
+from import_cruiser.analyzer import Analyzer
 from import_cruiser.exporter import export_dot, export_json
-from import_cruiser.graph import Dependency, DependencyGraph, Module
+from import_cruiser.graph import Dependency, DependencyGraph, Module, filter_graph
 from import_cruiser.validator import Violation
+
+
+COMPLEX_FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "complex_project"
 
 
 def simple_graph() -> DependencyGraph:
@@ -83,3 +88,61 @@ class TestExportDot:
         result = export_dot(DependencyGraph())
         assert "digraph" in result
         assert "->" not in result
+
+    def test_cluster_edges_for_path_mode_use_real_paths(self) -> None:
+        graph = Analyzer(COMPLEX_FIXTURE_ROOT).analyze()
+        filtered = filter_graph(
+            graph,
+            exclude_paths=[r"__init__\.py$"],
+        )
+        result = export_dot(
+            filtered,
+            style="cruiser",
+            cluster_mode="path",
+            cluster_depth=4,
+            edge_mode="cluster",
+        )
+        assert "cluster_src_risk_like_app" in result
+        assert "cluster_src_risk_like_domain" in result
+        assert "cluster_src_risk_like_infra" in result
+        assert 'ltail="cluster_src_risk_like_app"' in result
+        assert (
+            'lhead="cluster_src_risk_like_domain"' in result
+            or 'lhead="cluster_src_risk_like_infra"' in result
+        )
+
+    def test_cluster_edge_mode_skips_nonexistent_top_level_clusters(self) -> None:
+        graph = DependencyGraph()
+        graph.add_module(Module(name="examples.a", path="/tmp/examples/a.py"))
+        graph.add_module(Module(name="pkg.b", path="/tmp/src/pkg/b.py"))
+        graph.add_dependency(Dependency(source="examples.a", target="pkg.b", line=1))
+
+        result = export_dot(
+            graph,
+            style="cruiser",
+            cluster_mode="path",
+            cluster_depth=2,
+            edge_mode="cluster",
+        )
+        assert '"examples.a" -> "pkg.b";' in result
+        assert "ltail=" not in result
+        assert "lhead=" not in result
+
+    def test_cluster_edge_mode_skips_ancestor_cluster_links(self) -> None:
+        graph = DependencyGraph()
+        graph.add_module(Module(name="pkg.mod", path="/tmp/src/pkg/mod.py"))
+        graph.add_module(Module(name="pkg.sub.leaf", path="/tmp/src/pkg/sub/leaf.py"))
+        graph.add_dependency(
+            Dependency(source="pkg.sub.leaf", target="pkg.mod", line=1)
+        )
+
+        result = export_dot(
+            graph,
+            style="cruiser",
+            cluster_mode="path",
+            cluster_depth=3,
+            edge_mode="cluster",
+        )
+        assert '"pkg.sub.leaf" -> "pkg.mod";' in result
+        assert "ltail=" not in result
+        assert "lhead=" not in result

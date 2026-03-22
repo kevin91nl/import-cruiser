@@ -6,19 +6,27 @@ from __future__ import annotations
 import sys
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 import click
 
 from import_cruiser import __version__
 from import_cruiser.analyzer import Analyzer
 from import_cruiser.config import JSONDict, ConfigError, default_config, load_config
-from import_cruiser.detector import detect_cycles
-from import_cruiser.exporter import export_dot, export_html, export_json, export_svg
+from import_cruiser.exporter import (
+    ViolationLike,
+    export_dot,
+    export_html,
+    export_json,
+    export_matrix_html,
+    export_matrix_json,
+    export_svg,
+)
 from import_cruiser.graph import (
     DependencyGraph,
     aggregate_by_path,
     collapse_graph,
+    detect_cycles,
     filter_graph,
 )
 from import_cruiser.validator import Validator, Violation
@@ -48,7 +56,10 @@ def main() -> None:
     "--format",
     "-f",
     "fmt",
-    type=click.Choice(["json", "dot", "svg", "html"], case_sensitive=False),
+    type=click.Choice(
+        ["json", "dot", "svg", "html", "matrix-html", "matrix-json"],
+        case_sensitive=False,
+    ),
     default="json",
     show_default=True,
     help="Output format.",
@@ -230,6 +241,10 @@ def cmd_analyze(
             style=style,
             edge_mode=edge_mode,
         )
+    elif fmt == "matrix-html":
+        result = export_matrix_html(graph)
+    elif fmt == "matrix-json":
+        result = export_matrix_json(graph)
     else:
         cycles = detect_cycles(graph)
         result = export_json(graph, cycles=cycles)
@@ -265,11 +280,20 @@ def cmd_analyze(
     default=False,
     help="Exit with non-zero status if there are any violations.",
 )
+@click.option(
+    "--output-format",
+    "output_format",
+    type=click.Choice(["json", "flake8", "pylint", "github"], case_sensitive=False),
+    default="json",
+    show_default=True,
+    help="Output format for validation results (use linter formats for CI/editor integration).",
+)
 def cmd_validate(
     path: str,
     config_path: Optional[str],
     output: Optional[str],
     strict: bool,
+    output_format: str,
 ) -> None:
     """Validate Python import dependencies in PATH against configured rules.
 
@@ -285,8 +309,17 @@ def cmd_validate(
     cycles = detect_cycles(graph)
     rules = _extract_rules(config)
     violations = Validator(rules).validate(graph)
+    violations_like = cast(list[ViolationLike], violations)
 
-    result = export_json(graph, violations=violations, cycles=cycles)
+    if output_format == "json":
+        result = export_json(graph, violations=violations_like, cycles=cycles)
+    else:
+        result = _format_lint_output(
+            violations,
+            graph,
+            root_path=Path(path).resolve(),
+            output_format=output_format,
+        )
     _write_output(result, output)
 
     if strict and violations:
@@ -318,7 +351,9 @@ def cmd_validate(
     "--format",
     "-f",
     "fmt",
-    type=click.Choice(["dot", "svg", "html"], case_sensitive=False),
+    type=click.Choice(
+        ["dot", "svg", "html", "matrix-html", "matrix-json"], case_sensitive=False
+    ),
     default="dot",
     show_default=True,
     help="Export format.",
@@ -474,10 +509,11 @@ def cmd_export(
         )
     )
     violations = _load_violations(config_path, graph)
+    violations_like = cast(list[ViolationLike], violations)
     if fmt == "dot":
         result = export_dot(
             graph,
-            violations=violations,
+            violations=violations_like,
             rankdir=rankdir,
             cluster_depth=cluster_depth,
             cluster_mode=cluster_mode,
@@ -495,10 +531,10 @@ def cmd_export(
             style=style,
             edge_mode=edge_mode,
         )
-    else:
+    elif fmt == "html":
         result = export_html(
             graph,
-            violations=violations,
+            violations=violations_like,
             engine=layout,
             rankdir=rankdir,
             cluster_depth=cluster_depth,
@@ -506,6 +542,10 @@ def cmd_export(
             style=style,
             edge_mode=edge_mode,
         )
+    elif fmt == "matrix-html":
+        result = export_matrix_html(graph)
+    else:
+        result = export_matrix_json(graph)
     _write_output(result, output)
 
 
@@ -516,7 +556,8 @@ def cmd_export(
 
 def _write_output(content: str, output: Optional[str]) -> None:
     if output:
-        Path(output).write_text(content, encoding="utf-8")
+        payload = content if content.endswith("\n") else content + "\n"
+        Path(output).write_text(payload, encoding="utf-8")
         click.echo(f"Output written to {output}", err=True)
     else:
         click.echo(content)
@@ -589,6 +630,17 @@ def _apply_graph_options(
         collapse_depth = 0
         if edge_mode == "auto":
             edge_mode = "cluster"
+    if style == "cruiser":
+        layout = "dot"
+        rankdir = "TB"
+        cluster_mode = "path"
+        if cluster_depth == 3:
+            cluster_depth = 5
+        if edge_mode == "auto":
+            if len(filtered.modules) > 200 or len(filtered.dependencies) > 400:
+                edge_mode = "cluster"
+            else:
+                edge_mode = "node"
     if edge_mode == "auto":
         edge_mode = "node"
 
@@ -608,10 +660,11 @@ def _export_svg(
 ) -> str:
     if violations is None:
         violations = []
+    violations_like = cast(list[ViolationLike], violations)
     try:
         return export_svg(
             graph,
-            violations=violations,
+            violations=violations_like,
             engine=layout,
             rankdir=rankdir,
             cluster_depth=cluster_depth,
@@ -643,6 +696,67 @@ def _extract_rules(config: JSONDict) -> list[JSONDict]:
     if not isinstance(rules_raw, list):
         return []
     return [rule for rule in rules_raw if isinstance(rule, dict)]
+
+
+def _format_lint_output(
+    violations: list[Violation],
+    graph: DependencyGraph,
+    root_path: Path,
+    output_format: str,
+) -> str:
+    if not violations:
+        return ""
+
+    dep_lines = {(d.source, d.target): d.line for d in graph.dependencies}
+    lines: list[str] = []
+
+    for violation in violations:
+        module = graph.get_module(violation.source)
+        raw_path = module.path if module else violation.source.replace(".", "/") + ".py"
+        rel_path = _to_display_path(raw_path, root_path)
+        line_no = dep_lines.get((violation.source, violation.target), 1) or 1
+        col_no = 1
+        code = _lint_code(violation.severity)
+        message = f"{violation.message} [rule: {violation.rule_name}]"
+
+        if output_format == "flake8":
+            lines.append(f"{rel_path}:{line_no}:{col_no}: {code} {message}")
+        elif output_format == "pylint":
+            lines.append(f"{rel_path}:{line_no}: [{code}] {message}")
+        else:
+            level = _github_level(violation.severity)
+            escaped = (
+                message.replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D")
+            )
+            lines.append(
+                f"::{level} file={rel_path},line={line_no},col={col_no}::{escaped}"
+            )
+
+    return "\n".join(lines)
+
+
+def _to_display_path(path_value: str, root_path: Path) -> str:
+    raw = Path(path_value)
+    try:
+        return str(raw.resolve().relative_to(root_path)).replace("\\", "/")
+    except ValueError:
+        return str(raw).replace("\\", "/")
+
+
+def _lint_code(severity: str) -> str:
+    return {
+        "error": "IC001",
+        "warn": "IC002",
+        "info": "IC003",
+    }.get(severity, "IC001")
+
+
+def _github_level(severity: str) -> str:
+    return {
+        "error": "error",
+        "warn": "warning",
+        "info": "notice",
+    }.get(severity, "error")
 
 
 if __name__ == "__main__":

@@ -93,12 +93,24 @@ repos:
         language: python
         pass_filenames: false
         always_run: true
+      - id: refresh-self-graph
+        name: Refresh self-graph artifacts
+        entry: make self-graph
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: unit-tests-targeted
         name: Targeted unit tests (fast)
         entry: python scripts/run_targeted_unit_tests.py
         language: python
         additional_dependencies: ["click", "pytest", "pytest-cov"]
         pass_filenames: false
+      - id: import-cruiser-architecture
+        name: import-cruiser architecture validation
+        entry: bash -c 'PYTHONPATH=src python3 -m import_cruiser.cli validate src --config import-cruiser.json --strict --output-format pylint'
+        language: system
+        pass_filenames: false
+        always_run: true
 
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.5.0

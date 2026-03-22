@@ -3,7 +3,14 @@
 from .analyzer import Analyzer
 from .config import ConfigError, default_config, load_config, validate_config
 from .detector import detect_cycles
-from .exporter import export_dot, export_html, export_json, export_svg
+from .exporter import (
+    export_dot,
+    export_html,
+    export_json,
+    export_matrix_html,
+    export_matrix_json,
+    export_svg,
+)
 from .graph import (
     Dependency,
     DependencyGraph,
@@ -29,10 +36,12 @@ __all__ = [
     "export_dot",
     "export_html",
     "export_json",
+    "export_matrix_html",
+    "export_matrix_json",
     "export_svg",
     "filter_graph",
     "load_config",
     "validate_config",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

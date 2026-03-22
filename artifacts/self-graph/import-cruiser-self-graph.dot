@@ -1,0 +1,33 @@
+digraph "import_cruiser" {
+    graph [rankdir=LR, splines=curved, overlap=false, nodesep=0.16, ranksep=0.18, fontname="Helvetica-bold", fontsize=9, style="rounded,bold,filled", fillcolor="#FFFFFF", compound=true, pack=true, packmode="array_u", newrank=true, ratio="compress", pad=0.35, margin=0.35];
+    node [shape=box, style="rounded,filled", height=0.2, color="black", fillcolor="#FFFFCC", fontcolor="black", fontname="Helvetica", fontsize=9];
+    edge [arrowhead="normal", arrowsize=0.6, penwidth=2.0, color="#00000033", fontname="Helvetica", fontsize=9];
+
+    subgraph "cluster_import_cruiser" {
+        label="import_cruiser";
+        margin=40;
+        color="black";
+        penwidth=1.0;
+        style="rounded,bold";
+        fontname="Helvetica";
+        fontsize=9;
+        "import_cruiser.analyzer" [label="analyzer", tooltip="/Users/kevin/Documents/GitHub/pydepend/src/import_cruiser/analyzer.py"];
+        "import_cruiser.cli" [label="cli", tooltip="/Users/kevin/Documents/GitHub/pydepend/src/import_cruiser/cli.py"];
+        "import_cruiser.config" [label="config", tooltip="/Users/kevin/Documents/GitHub/pydepend/src/import_cruiser/config.py"];
+        "import_cruiser.detector" [label="detector", tooltip="/Users/kevin/Documents/GitHub/pydepend/src/import_cruiser/detector.py"];
+        "import_cruiser.exporter" [label="exporter", tooltip="/Users/kevin/Documents/GitHub/pydepend/src/import_cruiser/exporter.py"];
+        "import_cruiser.graph" [label="graph", tooltip="/Users/kevin/Documents/GitHub/pydepend/src/import_cruiser/graph.py"];
+        "import_cruiser.validator" [label="validator", tooltip="/Users/kevin/Documents/GitHub/pydepend/src/import_cruiser/validator.py"];
+    }
+
+    "import_cruiser.analyzer" -> "import_cruiser.graph";
+    "import_cruiser.cli" -> "import_cruiser.analyzer";
+    "import_cruiser.cli" -> "import_cruiser.config";
+    "import_cruiser.cli" -> "import_cruiser.exporter";
+    "import_cruiser.cli" -> "import_cruiser.graph";
+    "import_cruiser.cli" -> "import_cruiser.validator";
+    "import_cruiser.detector" -> "import_cruiser.graph";
+    "import_cruiser.exporter" -> "import_cruiser.graph";
+    "import_cruiser.validator" -> "import_cruiser.config";
+    "import_cruiser.validator" -> "import_cruiser.graph";
+}

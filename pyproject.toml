@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "import-cruiser"
-version = "0.1.0"
+version = "0.2.0"
 description = "Analyze, validate, and visualize Python import dependencies — like dependency-cruiser for Python."
 authors = ["kevin91nl"]
 readme = "README.md"
@@ -25,7 +25,7 @@ build-backend = "poetry.core.masonry.api"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "--tb=short"
+addopts = "--tb=short --cov=src/import_cruiser --cov-fail-under=100"
 
 [tool.coverage.run]
 source = ["src/import_cruiser"]
@@ -59,6 +59,9 @@ file_allowlist = [
 ]
 function_allowlist = [
   "import_cruiser.cli._apply_graph_options",
+  "import_cruiser.analyzer._collect_imports",
   "import_cruiser.exporter.export_dot",
+  "import_cruiser.exporter.export_matrix_html",
+  "import_cruiser.exporter._html_with_svg",
   "import_cruiser.graph.aggregate_by_path",
 ]

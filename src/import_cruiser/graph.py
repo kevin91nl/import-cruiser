@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
@@ -93,6 +94,47 @@ class DependencyGraph:
     def edges(self) -> Iterable[tuple[str, str]]:
         for dep in self._dependencies:
             yield dep.source, dep.target
+
+
+def detect_cycles(graph: DependencyGraph) -> list[list[str]]:
+    """Return a list of cycles found in *graph*."""
+    adj: dict[str, list[str]] = defaultdict(list)
+    for source, target in graph.edges():
+        adj[source].append(target)
+
+    all_modules = {m.name for m in graph.modules}
+
+    visited: set[str] = set()
+    rec_stack: set[str] = set()
+    cycles: list[list[str]] = []
+    seen_cycles: set[frozenset[str]] = set()
+
+    def dfs(node: str, path: list[str]) -> None:
+        visited.add(node)
+        rec_stack.add(node)
+        path.append(node)
+
+        for neighbour in adj.get(node, []):
+            if neighbour not in all_modules:
+                continue
+            if neighbour not in visited:
+                dfs(neighbour, path)
+            elif neighbour in rec_stack:
+                cycle_start = path.index(neighbour)
+                cycle = path[cycle_start:]
+                normalised = frozenset(cycle)
+                if normalised not in seen_cycles:
+                    cycles.append(list(cycle))
+                    seen_cycles.add(normalised)
+
+        path.pop()
+        rec_stack.discard(node)
+
+    for module in sorted(all_modules):
+        if module not in visited:
+            dfs(module, [])
+
+    return cycles
 
 
 def filter_graph(
@@ -316,10 +358,11 @@ def _common_root(modules: list[Module]) -> str | None:
 
 
 def _group_key(path: str, root: str, depth: int) -> str:
-    rel = Path(path).resolve().relative_to(root)
+    root_path = Path(root).resolve()
+    rel = Path(path).resolve().relative_to(root_path)
     parts = list(rel.parts[:-1])  # directories only
     if not parts:
-        return Path(root).name
+        return root_path.name
     return os.path.join(*parts[: min(depth, len(parts))])
 
 

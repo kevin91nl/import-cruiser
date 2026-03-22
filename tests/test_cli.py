@@ -160,6 +160,99 @@ class TestValidateCommand:
         )
         assert result.exit_code != 0
 
+    def test_lint_output_flake8_format(
+        self, sample_project: Path, tmp_path: Path
+    ) -> None:
+        config = {
+            "rules": [
+                {
+                    "name": "no-b-to-c",
+                    "severity": "error",
+                    "from": {"path": "b$"},
+                    "to": {"path": "c$"},
+                    "allow": False,
+                }
+            ]
+        }
+        cfg_file = tmp_path / "cfg.json"
+        cfg_file.write_text(json.dumps(config))
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "validate",
+                str(sample_project),
+                "--config",
+                str(cfg_file),
+                "--output-format",
+                "flake8",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "mypkg/b.py:1:1: IC001" in result.output
+
+    def test_lint_output_pylint_format(
+        self, sample_project: Path, tmp_path: Path
+    ) -> None:
+        config = {
+            "rules": [
+                {
+                    "name": "no-b-to-c",
+                    "severity": "warn",
+                    "from": {"path": "b$"},
+                    "to": {"path": "c$"},
+                    "allow": False,
+                }
+            ]
+        }
+        cfg_file = tmp_path / "cfg.json"
+        cfg_file.write_text(json.dumps(config))
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "validate",
+                str(sample_project),
+                "--config",
+                str(cfg_file),
+                "--output-format",
+                "pylint",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "mypkg/b.py:1: [IC002]" in result.output
+
+    def test_lint_output_github_format(
+        self, sample_project: Path, tmp_path: Path
+    ) -> None:
+        config = {
+            "rules": [
+                {
+                    "name": "no-b-to-c",
+                    "severity": "info",
+                    "from": {"path": "b$"},
+                    "to": {"path": "c$"},
+                    "allow": False,
+                }
+            ]
+        }
+        cfg_file = tmp_path / "cfg.json"
+        cfg_file.write_text(json.dumps(config))
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "validate",
+                str(sample_project),
+                "--config",
+                str(cfg_file),
+                "--output-format",
+                "github",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "::notice file=mypkg/b.py,line=1,col=1::" in result.output
+
 
 class TestExportCommand:
     def test_export_dot(self, sample_project: Path) -> None:
@@ -177,6 +270,102 @@ class TestExportCommand:
         assert result.exit_code == 0
         assert out_file.exists()
         assert "digraph" in out_file.read_text()
+
+    def test_export_cruiser_auto_uses_node_edges(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "src" / "mypkg"
+        (pkg / "app").mkdir(parents=True)
+        (pkg / "domain").mkdir(parents=True)
+        (pkg / "__init__.py").write_text("")
+        (pkg / "app" / "__init__.py").write_text("")
+        (pkg / "domain" / "__init__.py").write_text("")
+        (pkg / "app" / "api.py").write_text("import mypkg.domain.model\n")
+        (pkg / "domain" / "model.py").write_text("x = 1\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "export",
+                str(tmp_path),
+                "--format",
+                "dot",
+                "--style",
+                "cruiser",
+                "--edge-mode",
+                "auto",
+                "--exclude-path",
+                "__init__\\.py$",
+                "--cluster-depth",
+                "3",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert '"mypkg.app.api" -> "mypkg.domain.model";' in result.output
+        assert "ltail=" not in result.output
+        assert "lhead=" not in result.output
+
+    def test_export_default_style_uses_dependency_cruiser_like_defaults(
+        self, tmp_path: Path
+    ) -> None:
+        pkg = tmp_path / "src" / "mypkg" / "modules" / "company_events"
+        pkg.mkdir(parents=True)
+        shared = tmp_path / "src" / "mypkg" / "shared"
+        shared.mkdir(parents=True)
+        (tmp_path / "src" / "mypkg" / "__init__.py").parent.mkdir(
+            parents=True, exist_ok=True
+        )
+        (tmp_path / "src" / "mypkg" / "__init__.py").write_text("")
+        (tmp_path / "src" / "mypkg" / "modules" / "__init__.py").write_text("")
+        (
+            tmp_path / "src" / "mypkg" / "modules" / "company_events" / "__init__.py"
+        ).write_text("")
+        (tmp_path / "src" / "mypkg" / "shared" / "__init__.py").write_text("")
+        (
+            tmp_path / "src" / "mypkg" / "modules" / "company_events" / "api.py"
+        ).write_text(
+            "import mypkg.modules.company_events.model\nimport mypkg.shared.types\n"
+        )
+        (
+            tmp_path / "src" / "mypkg" / "modules" / "company_events" / "model.py"
+        ).write_text("x = 1\n")
+        (tmp_path / "src" / "mypkg" / "shared" / "types.py").write_text("x = 1\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "export",
+                str(tmp_path),
+                "--format",
+                "dot",
+                "--exclude-path",
+                "__init__\\.py$",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "rankdir=LR" in result.output
+        assert 'fillcolor="#FFFFCC"' in result.output
+
+    def test_export_default_style_auto_fallback_for_default_style(
+        self, sample_project: Path
+    ) -> None:
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "export",
+                str(sample_project),
+                "--format",
+                "dot",
+                "--style",
+                "default",
+                "--edge-mode",
+                "auto",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "ltail=" not in result.output
+        assert "lhead=" not in result.output
 
 
 class TestVersionCommand:

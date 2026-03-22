@@ -64,6 +64,26 @@ def _collect_imports(source: str, module_name: str) -> list[tuple[str, int]]:
                             else alias.name
                         )
                         imports.append((resolved, node.lineno))
+
+    if imports:
+        return imports
+
+    parts = module_name.split(".")
+    for lineno, line in enumerate(source.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped.startswith("from ") or " import " not in stripped:
+            continue
+        target = stripped[5:].split(" import ", 1)[0].strip()
+        if not target.startswith("."):
+            continue
+
+        level = len(target) - len(target.lstrip("."))
+        module = target[level:]
+        base_parts = parts[: max(0, len(parts) - level)]
+        resolved = ".".join(base_parts + [module]) if base_parts and module else module
+        if resolved:
+            imports.append((resolved, lineno))
+
     return imports
 
 

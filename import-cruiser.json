@@ -1,0 +1,49 @@
+{
+  "rules": [
+    {
+      "name": "no-imports-to-cli-from-non-cli",
+      "severity": "error",
+      "from": { "path": "^import_cruiser\\.(?!cli$).+" },
+      "to": { "path": "^import_cruiser\\.cli$" },
+      "allow": false
+    },
+    {
+      "name": "graph-must-stay-core",
+      "severity": "error",
+      "from": { "path": "^import_cruiser\\.graph$" },
+      "to": { "path": "^import_cruiser\\.(analyzer|cli|config|detector|exporter|validator)$" },
+      "allow": false
+    },
+    {
+      "name": "detector-must-only-depend-on-graph",
+      "severity": "error",
+      "from": { "path": "^import_cruiser\\.detector$" },
+      "to": { "path": "^import_cruiser\\.(?!graph$).+" },
+      "allow": false
+    },
+    {
+      "name": "exporter-must-only-depend-on-graph",
+      "severity": "error",
+      "from": { "path": "^import_cruiser\\.exporter$" },
+      "to": { "path": "^import_cruiser\\.(?!graph$).+" },
+      "allow": false
+    },
+    {
+      "name": "validator-dependencies-limited",
+      "severity": "error",
+      "from": { "path": "^import_cruiser\\.validator$" },
+      "to": { "path": "^import_cruiser\\.(analyzer|cli|detector|exporter)$" },
+      "allow": false
+    },
+    {
+      "name": "analyzer-dependencies-limited",
+      "severity": "error",
+      "from": { "path": "^import_cruiser\\.analyzer$" },
+      "to": { "path": "^import_cruiser\\.(cli|config|detector|exporter|validator)$" },
+      "allow": false
+    }
+  ],
+  "options": {
+    "include_external": false
+  }
+}
