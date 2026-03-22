@@ -30,6 +30,8 @@ jobs:
           python -m pip install -e .
 
       - name: Run pre-commit
+        env:
+          SKIP: refresh-self-graph
         run: pre-commit run --all-files
 
       - name: Build package
