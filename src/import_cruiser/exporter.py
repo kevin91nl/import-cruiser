@@ -398,7 +398,7 @@ def _render_cluster_tree(
         lines.append(f'{level_indent}subgraph "cluster_{cid}" {{')
         lines.append(f'{level_indent}    label="{cluster["label"]}";')
         lines.append(f'{level_indent}    class="cluster_key_{cid}";')
-        lines.append(f"{level_indent}    margin=40;")
+        lines.append(f"{level_indent}    margin=26;")
         lines.append(f'{level_indent}    color="black";')
         lines.append(f"{level_indent}    penwidth=1.0;")
         lines.append(f'{level_indent}    style="rounded,bold";')
@@ -561,10 +561,10 @@ def _style_attrs(style: str, rankdir: str) -> tuple[str, str, str]:
 
     if style == "cruiser":
         graph_attrs = (
-            f"rankdir={rankdir}, splines=curved, overlap=false, ranksep=0.75, "
-            'nodesep=0.35, pack=true, packmode="clust", newrank=true, '
+            f"rankdir={rankdir}, splines=curved, overlap=false, ranksep=1.05, "
+            "nodesep=0.6, pack=false, newrank=true, concentrate=true, "
             'compound=true, ratio="compress", '
-            'fontname="Helvetica", fontsize=10, bgcolor="white", pad=0.35, margin=0.35'
+            'fontname="Helvetica", fontsize=10, bgcolor="white", pad=0.45, margin=0.45'
         )
         node_attrs = (
             'shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, '
@@ -789,6 +789,18 @@ def _html_with_svg(svg: str, title: str) -> str:
         #collapsed-proxy-layer .collapsed-proxy-dot {{
             fill: #92400e;
         }}
+        #cluster-branch-toggle-layer .branch-toggle-badge {{
+            fill: #f3f4f6;
+            stroke: #6b7280;
+            stroke-width: 1px;
+        }}
+        #cluster-branch-toggle-layer .branch-toggle-text {{
+            fill: #374151;
+            font-size: 11px;
+            font-weight: 700;
+            text-anchor: middle;
+            dominant-baseline: central;
+        }}
     </style>
 </head>
 <body>
@@ -841,10 +853,13 @@ def _html_with_svg(svg: str, title: str) -> str:
         const clusterAnchors = new Map();
         const proxyPoints = new Map();
         const proxyBoxes = new Map();
+        const clusterToggleLayer = document.createElementNS(SVG_NS, 'g');
+        clusterToggleLayer.setAttribute('id', 'cluster-branch-toggle-layer');
         const proxyLayer = document.createElementNS(SVG_NS, 'g');
         proxyLayer.setAttribute('id', 'collapsed-proxy-layer');
         const graphRoot =
             svg.querySelector('g[id^="graph"]') || svg.querySelector('g') || svg;
+        graphRoot.appendChild(clusterToggleLayer);
         graphRoot.appendChild(proxyLayer);
 
         nodeGroups.forEach((node) => {{
@@ -973,6 +988,34 @@ def _html_with_svg(svg: str, title: str) -> str:
                     (a, b) =>
                         (b.dataset.key || '').length - (a.dataset.key || '').length
                 );
+        }};
+
+        const descendantsForCluster = (cluster) => {{
+            const key = cluster.dataset.key || '';
+            if (!key) return [];
+            return clusterGroups.filter((candidate) => {{
+                if (candidate === cluster) return false;
+                const candidateKey = candidate.dataset.key || '';
+                return candidateKey.startsWith(`${{key}}_`);
+            }});
+        }};
+
+        const toggleClusterDescendants = (cluster) => {{
+            const descendants = descendantsForCluster(cluster).filter(
+                (candidate) => (clusterNodeCounts.get(candidate) || 0) > 0
+            );
+            if (!descendants.length) return;
+            const allCollapsed = descendants.every((candidate) =>
+                collapsedClusters.has(candidate)
+            );
+            if (allCollapsed) {{
+                descendants.forEach((candidate) => collapsedClusters.delete(candidate));
+            }} else {{
+                descendants.forEach((candidate) => collapsedClusters.add(candidate));
+            }}
+            pinned = null;
+            updateVisibility();
+            clearFocus(true);
         }};
 
         const endpointForNodeName = (name) => {{
@@ -1116,6 +1159,53 @@ def _html_with_svg(svg: str, title: str) -> str:
             }});
         }};
 
+        const drawClusterBranchToggles = () => {{
+            clusterToggleLayer.replaceChildren();
+            clusterGroups.forEach((cluster) => {{
+                if (hasCollapsedAncestorCluster(cluster)) return;
+                if (collapsedClusters.has(cluster)) return;
+                const descendants = descendantsForCluster(cluster).filter(
+                    (candidate) => (clusterNodeCounts.get(candidate) || 0) > 0
+                );
+                if (!descendants.length) return;
+                const anchor = clusterAnchors.get(cluster);
+                if (!anchor) return;
+                const w = 14;
+                const h = 14;
+                const x = anchor.x + anchor.width + 8;
+                const y = anchor.y - 1;
+                const allCollapsed = descendants.every((candidate) =>
+                    collapsedClusters.has(candidate)
+                );
+
+                const group = document.createElementNS(SVG_NS, 'g');
+                group.style.cursor = 'pointer';
+                group.style.pointerEvents = 'auto';
+
+                const rect = document.createElementNS(SVG_NS, 'rect');
+                rect.setAttribute('class', 'branch-toggle-badge');
+                rect.setAttribute('x', String(x));
+                rect.setAttribute('y', String(y));
+                rect.setAttribute('width', String(w));
+                rect.setAttribute('height', String(h));
+                rect.setAttribute('rx', '2');
+
+                const text = document.createElementNS(SVG_NS, 'text');
+                text.setAttribute('class', 'branch-toggle-text');
+                text.setAttribute('x', String(x + w / 2));
+                text.setAttribute('y', String(y + h / 2));
+                text.textContent = allCollapsed ? '+' : '-';
+
+                group.appendChild(rect);
+                group.appendChild(text);
+                group.addEventListener('click', (event) => {{
+                    event.stopPropagation();
+                    toggleClusterDescendants(cluster);
+                }});
+                clusterToggleLayer.appendChild(group);
+            }});
+        }};
+
         const hasCollapsedCluster = (node) => {{
             for (const cluster of collapsedClusters) {{
                 const key = cluster.dataset.key || '';
@@ -1144,6 +1234,9 @@ def _html_with_svg(svg: str, title: str) -> str:
                 }}
                 cluster.style.display = '';
                 updateClusterLabel(cluster);
+                if (!collapsedClusters.has(cluster)) {{
+                    refreshClusterAnchor(cluster);
+                }}
             }});
 
             nodeGroups.forEach((node) => {{
@@ -1161,6 +1254,7 @@ def _html_with_svg(svg: str, title: str) -> str:
                         : 'none';
             }});
             drawCollapsedProxyEdges();
+            drawClusterBranchToggles();
         }};
 
         const expandAllClusters = () => {{

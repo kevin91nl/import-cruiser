@@ -163,6 +163,8 @@ class TestExportDot:
         assert 'id="collapse-all"' in html
         assert "collapseNearTarget(10)" not in html
         assert "toggleCluster" in html
+        assert "toggleClusterDescendants" in html
+        assert "cluster-branch-toggle-layer" in html
         assert "collapsed-proxy-layer" in html
         assert "drawCollapsedProxyEdges" in html
         assert "group.appendChild(textEl)" in html

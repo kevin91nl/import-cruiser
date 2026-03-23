@@ -1,12 +1,12 @@
 digraph "import_cruiser" {
-    graph [rankdir=TB, splines=curved, overlap=false, ranksep=0.75, nodesep=0.35, pack=true, packmode="clust", newrank=true, compound=true, ratio="compress", fontname="Helvetica", fontsize=10, bgcolor="white", pad=0.35, margin=0.35];
+    graph [rankdir=TB, splines=curved, overlap=false, ranksep=1.05, nodesep=0.6, pack=false, newrank=true, concentrate=true, compound=true, ratio="compress", fontname="Helvetica", fontsize=10, bgcolor="white", pad=0.45, margin=0.45];
     node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, color="#2F2F2F", fillcolor="#DFF3F8"];
     edge [color="#B0B0B0", arrowsize=0.7];
 
     subgraph "cluster_src" {
         label="src";
         class="cluster_key_src";
-        margin=40;
+        margin=26;
         color="black";
         penwidth=1.0;
         style="rounded,bold";
@@ -16,7 +16,7 @@ digraph "import_cruiser" {
         subgraph "cluster_src_import_cruiser" {
             label="import_cruiser";
             class="cluster_key_src_import_cruiser";
-            margin=40;
+            margin=26;
             color="black";
             penwidth=1.0;
             style="rounded,bold";
