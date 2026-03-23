@@ -7,12 +7,13 @@ from pathlib import Path
 
 
 from import_cruiser.analyzer import Analyzer
-from import_cruiser.exporter import export_dot, export_json
+from import_cruiser.exporter import export_dot, export_html, export_json
 from import_cruiser.graph import Dependency, DependencyGraph, Module, filter_graph
 from import_cruiser.validator import Violation
 
 
 COMPLEX_FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "complex_project"
+COLLAPSE_FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "collapse_demo"
 
 
 def simple_graph() -> DependencyGraph:
@@ -146,3 +147,39 @@ class TestExportDot:
         assert '"pkg.sub.leaf" -> "pkg.mod";' in result
         assert "ltail=" not in result
         assert "lhead=" not in result
+
+    def test_html_includes_expand_collapse_controls(self) -> None:
+        graph = Analyzer(COLLAPSE_FIXTURE_ROOT).analyze()
+        html = export_html(
+            graph,
+            cluster_mode="path",
+            cluster_depth=5,
+            edge_mode="node",
+        )
+        assert 'id="expand-all"' in html
+        assert 'id="collapse-all"' in html
+        assert "collapseNearTarget(10)" not in html
+        assert "toggleCluster" in html
+        assert "collapsed-proxy-layer" in html
+        assert "drawCollapsedProxyEdges" in html
+        assert "group.appendChild(textEl)" in html
+        assert (
+            "labelEl.style.display = collapsedClusters.has(cluster) ? 'none' : '';"
+            in html
+        )
+        assert "Direction:" in html
+
+    def test_bidirectional_edges_are_exported(self) -> None:
+        graph = Analyzer(COLLAPSE_FIXTURE_ROOT).analyze()
+        filtered = filter_graph(
+            graph,
+            exclude_paths=[r"__init__\\.py$"],
+        )
+        dot = export_dot(
+            filtered,
+            cluster_mode="module",
+            cluster_depth=3,
+            edge_mode="node",
+        )
+        assert '"dep_demo.core.service" -> "dep_demo.ui.state"' in dot
+        assert '"dep_demo.ui.state" -> "dep_demo.core.service"' in dot

@@ -5,6 +5,7 @@ digraph "import_cruiser" {
 
     subgraph "cluster_src" {
         label="src";
+        class="cluster_key_src";
         margin=40;
         color="black";
         penwidth=1.0;
@@ -14,19 +15,20 @@ digraph "import_cruiser" {
         "__cluster_anchor_src" [label="", shape=point, width=0, height=0, style=invis];
         subgraph "cluster_src_import_cruiser" {
             label="import_cruiser";
+            class="cluster_key_src_import_cruiser";
             margin=40;
             color="black";
             penwidth=1.0;
             style="rounded,bold";
             fontname="Helvetica";
             fontsize=9;
-            "import_cruiser.analyzer" [label="analyzer.py", tooltip="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/analyzer.py"];
-            "import_cruiser.cli" [label="cli.py", tooltip="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/cli.py"];
-            "import_cruiser.config" [label="config.py", tooltip="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/config.py"];
-            "import_cruiser.detector" [label="detector.py", tooltip="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/detector.py"];
-            "import_cruiser.exporter" [label="exporter.py", tooltip="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/exporter.py"];
-            "import_cruiser.graph" [label="graph.py", tooltip="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/graph.py"];
-            "import_cruiser.validator" [label="validator.py", tooltip="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/validator.py"];
+            "import_cruiser.analyzer" [label="analyzer.py", tooltip="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/analyzer.py", class="node_cluster_src_import_cruiser"];
+            "import_cruiser.cli" [label="cli.py", tooltip="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/cli.py", class="node_cluster_src_import_cruiser"];
+            "import_cruiser.config" [label="config.py", tooltip="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/config.py", class="node_cluster_src_import_cruiser"];
+            "import_cruiser.detector" [label="detector.py", tooltip="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/detector.py", class="node_cluster_src_import_cruiser"];
+            "import_cruiser.exporter" [label="exporter.py", tooltip="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/exporter.py", class="node_cluster_src_import_cruiser"];
+            "import_cruiser.graph" [label="graph.py", tooltip="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/graph.py", class="node_cluster_src_import_cruiser"];
+            "import_cruiser.validator" [label="validator.py", tooltip="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/validator.py", class="node_cluster_src_import_cruiser"];
         }
     }
 

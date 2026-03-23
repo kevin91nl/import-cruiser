@@ -576,6 +576,7 @@ def _apply_graph_options(
         focus=focus or None,
         focus_depth=focus_depth,
     )
+    filtered = _drop_dangling_init_modules(filtered)
     if style in {"archi", "navigator"}:
         layout = "dot"
         rankdir = "TB"
@@ -629,6 +630,33 @@ def _apply_graph_options(
 
     collapsed = collapse_graph(filtered, collapse_depth)
     return collapsed, layout, rankdir, cluster_depth, cluster_mode, style, edge_mode
+
+
+def _drop_dangling_init_modules(graph: DependencyGraph) -> DependencyGraph:
+    connected: set[str] = set()
+    for dep in graph.dependencies:
+        connected.add(dep.source)
+        connected.add(dep.target)
+
+    dangling_init = {
+        module.name
+        for module in graph.modules
+        if module.path.endswith("__init__.py") and module.name not in connected
+    }
+    if not dangling_init:
+        return graph
+
+    trimmed = DependencyGraph()
+    for module in graph.modules:
+        if module.name in dangling_init:
+            continue
+        trimmed.add_module(module)
+
+    keep_names = {module.name for module in trimmed.modules}
+    for dep in graph.dependencies:
+        if dep.source in keep_names and dep.target in keep_names:
+            trimmed.add_dependency(dep)
+    return trimmed
 
 
 def _export_svg(

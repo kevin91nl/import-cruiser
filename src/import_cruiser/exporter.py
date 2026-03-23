@@ -315,9 +315,12 @@ def _dot_node_lines(
     in_cycle: bool,
     indent: str,
     label: str,
+    cluster_key: str | None = None,
 ) -> list[str]:
     safe = _dot_id(name)
     attrs = [f'label="{label}"', f'tooltip="{path}"']
+    if cluster_key:
+        attrs.append(f'class="node_cluster_{_cluster_id(cluster_key)}"')
     if in_cycle:
         attrs.append('fillcolor="#FDECEA"')
         attrs.append('color="#C0392B"')
@@ -394,6 +397,7 @@ def _render_cluster_tree(
         cid = _cluster_id(cluster["id"])
         lines.append(f'{level_indent}subgraph "cluster_{cid}" {{')
         lines.append(f'{level_indent}    label="{cluster["label"]}";')
+        lines.append(f'{level_indent}    class="cluster_key_{cid}";')
         lines.append(f"{level_indent}    margin=40;")
         lines.append(f'{level_indent}    color="black";')
         lines.append(f"{level_indent}    penwidth=1.0;")
@@ -422,6 +426,7 @@ def _render_cluster_tree(
                     module.name in cycle_nodes,
                     indent=level_indent + "    ",
                     label=_leaf_label(module, mode),
+                    cluster_key=cluster["id"],
                 )
             )
 
@@ -704,6 +709,26 @@ def _html_with_svg(svg: str, title: str) -> str:
             line-height: 1.4;
             z-index: 10;
         }}
+        .controls {{
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            z-index: 11;
+            display: flex;
+            gap: 8px;
+        }}
+        .controls button {{
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.95);
+            color: #111827;
+            font-size: 12px;
+            padding: 6px 10px;
+            cursor: pointer;
+        }}
+        .controls button:hover {{
+            background: #f9fafb;
+        }}
         #inspector h4 {{
             margin: 2px 0 8px;
             font-size: 12px;
@@ -739,11 +764,40 @@ def _html_with_svg(svg: str, title: str) -> str:
         g.cluster > polygon {{
             fill: none !important;
         }}
+        g.cluster > text {{
+            cursor: pointer;
+            user-select: none;
+        }}
+        g.cluster.collapsed > text {{
+            font-weight: 700;
+            fill: #78350f;
+        }}
+        g.cluster.collapsed > path,
+        g.cluster.collapsed > polygon {{
+            display: none;
+        }}
+        #collapsed-proxy-layer line {{
+            stroke: #6b7280;
+            stroke-width: 1.4px;
+            opacity: 0.9;
+        }}
+        #collapsed-proxy-layer .collapsed-proxy-badge {{
+            fill: #fde68a;
+            stroke: #b45309;
+            stroke-width: 1px;
+        }}
+        #collapsed-proxy-layer .collapsed-proxy-dot {{
+            fill: #92400e;
+        }}
     </style>
 </head>
 <body>
     <header>{display_title}</header>
     <div class="canvas" id="canvas">
+        <div class="controls">
+            <button type="button" id="expand-all">Expand all</button>
+            <button type="button" id="collapse-all">Collapse all</button>
+        </div>
         <div class="viewport" id="viewport">{svg}</div>
         <aside id="inspector">
             <h4>Context</h4>
@@ -755,6 +809,9 @@ def _html_with_svg(svg: str, title: str) -> str:
         const viewport = document.getElementById('viewport');
         const svg = viewport.querySelector('svg');
         const inspector = document.getElementById('inspector');
+        const expandAllButton = document.getElementById('expand-all');
+        const collapseAllButton = document.getElementById('collapse-all');
+        const SVG_NS = 'http://www.w3.org/2000/svg';
         let scale = 1;
         let originX = 0;
         let originY = 0;
@@ -773,13 +830,37 @@ def _html_with_svg(svg: str, title: str) -> str:
         const titleOf = (group) => group?.querySelector('title')?.textContent?.trim() || '';
         const nodeGroups = [...svg.querySelectorAll('g.node')];
         const edgeGroups = [...svg.querySelectorAll('g.edge')];
+        const clusterGroups = [...svg.querySelectorAll('g.cluster')];
         const nodeByName = new Map();
         const outgoing = new Map();
         const incoming = new Map();
+        const edgeKeys = new Set();
+        const collapsedClusters = new Set();
+        const clusterNodeCounts = new Map();
+        const clusterLabels = new Map();
+        const clusterAnchors = new Map();
+        const proxyPoints = new Map();
+        const proxyBoxes = new Map();
+        const proxyLayer = document.createElementNS(SVG_NS, 'g');
+        proxyLayer.setAttribute('id', 'collapsed-proxy-layer');
+        const graphRoot =
+            svg.querySelector('g[id^="graph"]') || svg.querySelector('g') || svg;
+        graphRoot.appendChild(proxyLayer);
 
         nodeGroups.forEach((node) => {{
             const name = titleOf(node);
             node.dataset.name = name;
+            const leafKeys = [...node.classList]
+                .filter((c) => c.startsWith('node_cluster_'))
+                .map((c) => c.replace(/^node_cluster_/, ''));
+            const allKeys = new Set();
+            leafKeys.forEach((key) => {{
+                const parts = key.split('_');
+                for (let i = 1; i <= parts.length; i += 1) {{
+                    allKeys.add(parts.slice(0, i).join('_'));
+                }}
+            }});
+            node.dataset.clusterKeys = [...allKeys].join('|');
             nodeByName.set(name, node);
             outgoing.set(name, []);
             incoming.set(name, []);
@@ -791,10 +872,320 @@ def _html_with_svg(svg: str, title: str) -> str:
             edge.dataset.src = src || '';
             edge.dataset.tgt = tgt || '';
             if (src && tgt) {{
+                edgeKeys.add(`${{src}}->${{tgt}}`);
                 outgoing.get(src)?.push(tgt);
                 incoming.get(tgt)?.push(src);
             }}
         }});
+
+        const labelTextFor = (cluster) => {{
+            return [...cluster.children].find(
+                (el) => el.tagName?.toLowerCase() === 'text'
+            );
+        }};
+
+        const keyFromCluster = (cluster) =>
+            titleOf(cluster).replace(/^cluster_/, '');
+
+        const nodeInCluster = (node, key) =>
+            (node.dataset.clusterKeys || '').split('|').includes(key);
+
+        clusterGroups.forEach((cluster) => {{
+            const key = keyFromCluster(cluster);
+            cluster.dataset.key = key;
+            const labelEl = labelTextFor(cluster);
+            if (!labelEl) return;
+            const raw = labelEl.textContent || '';
+            const base = raw.replace(/^[▸▾]\\s*/, '');
+            clusterLabels.set(cluster, base);
+            const labelBox = labelEl.getBBox();
+            clusterAnchors.set(cluster, {{
+                x: labelBox.x,
+                y: labelBox.y,
+                width: labelBox.width,
+                height: labelBox.height,
+                textX: parseFloat(labelEl.getAttribute('x') || '0'),
+                textY: parseFloat(labelEl.getAttribute('y') || '0'),
+                textAnchor: labelEl.getAttribute('text-anchor') || 'middle',
+            }});
+            clusterNodeCounts.set(
+                cluster,
+                nodeGroups.filter((node) => nodeInCluster(node, key)).length
+            );
+        }});
+
+        const isVisible = (element) => element.style.display !== 'none';
+        const isNodeVisibleByName = (name) => {{
+            const node = nodeByName.get(name);
+            return Boolean(node) && isVisible(node);
+        }};
+
+        const updateClusterLabel = (cluster) => {{
+            const labelEl = labelTextFor(cluster);
+            const base = clusterLabels.get(cluster);
+            if (!labelEl || !base) return;
+            const prefix = collapsedClusters.has(cluster) ? '▸ ' : '▾ ';
+            labelEl.textContent = `${{prefix}}${{base}}`;
+            labelEl.style.display = collapsedClusters.has(cluster) ? 'none' : '';
+            cluster.classList.toggle('collapsed', collapsedClusters.has(cluster));
+        }};
+
+        const refreshClusterAnchor = (cluster) => {{
+            const labelEl = labelTextFor(cluster);
+            if (!labelEl) return;
+            const box = labelEl.getBBox();
+            if (!box.width && !box.height) return;
+            clusterAnchors.set(cluster, {{
+                x: box.x,
+                y: box.y,
+                width: box.width,
+                height: box.height,
+            }});
+        }};
+
+        const ensureProxyArrowMarker = () => {{
+            let defs = svg.querySelector('defs');
+            if (!defs) {{
+                defs = document.createElementNS(SVG_NS, 'defs');
+                svg.insertBefore(defs, svg.firstChild);
+            }}
+            if (defs.querySelector('#collapsed-proxy-arrow')) return;
+            const marker = document.createElementNS(SVG_NS, 'marker');
+            marker.setAttribute('id', 'collapsed-proxy-arrow');
+            marker.setAttribute('viewBox', '0 0 10 10');
+            marker.setAttribute('refX', '8');
+            marker.setAttribute('refY', '5');
+            marker.setAttribute('markerWidth', '5');
+            marker.setAttribute('markerHeight', '5');
+            marker.setAttribute('orient', 'auto-start-reverse');
+            const path = document.createElementNS(SVG_NS, 'path');
+            path.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
+            path.setAttribute('fill', '#6b7280');
+            marker.appendChild(path);
+            defs.appendChild(marker);
+        }};
+
+        const collapsedClustersForNode = (node) => {{
+            const keys = (node.dataset.clusterKeys || '').split('|').filter(Boolean);
+            return [...collapsedClusters]
+                .filter((cluster) => keys.includes(cluster.dataset.key || ''))
+                .sort(
+                    (a, b) =>
+                        (b.dataset.key || '').length - (a.dataset.key || '').length
+                );
+        }};
+
+        const endpointForNodeName = (name) => {{
+            const node = nodeByName.get(name);
+            if (node && isVisible(node)) {{
+                const box = node.getBBox();
+                return {{
+                    id: `node:${{name}}`,
+                    center: {{ x: box.x + box.width / 2, y: box.y + box.height / 2 }},
+                    box,
+                }};
+            }}
+            if (!node) return null;
+            const targets = collapsedClustersForNode(node);
+            for (const target of targets) {{
+                const center = proxyPoints.get(target);
+                const box = proxyBoxes.get(target);
+                if (center && box) {{
+                    return {{
+                        id: `cluster:${{target.dataset.key || ''}}`,
+                        center,
+                        box,
+                    }};
+                }}
+            }}
+            return null;
+        }};
+
+        const boxEdgePoint = (box, from, to) => {{
+            const hw = Math.max(1, box.width / 2);
+            const hh = Math.max(1, box.height / 2);
+            const cx = box.x + hw;
+            const cy = box.y + hh;
+            const dx = to.x - from.x;
+            const dy = to.y - from.y;
+            if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) {{
+                return {{ x: cx, y: cy }};
+            }}
+            const tx = Math.abs(dx) / hw;
+            const ty = Math.abs(dy) / hh;
+            const t = 1 / Math.max(tx, ty, 1e-6);
+            return {{ x: cx + dx * t, y: cy + dy * t }};
+        }};
+
+        const drawCollapsedProxyEdges = () => {{
+            ensureProxyArrowMarker();
+            proxyLayer.replaceChildren();
+            proxyPoints.clear();
+            proxyBoxes.clear();
+
+            [...collapsedClusters]
+                .sort((a, b) => (a.dataset.key || '').localeCompare(b.dataset.key || ''))
+                .forEach((cluster) => {{
+                    if (hasCollapsedAncestorCluster(cluster)) return;
+                    const label = clusterLabels.get(cluster) || (cluster.dataset.key || '');
+                    const anchor = clusterAnchors.get(cluster);
+                    if (!anchor) return;
+                    const text = `▸ ${{label}}`;
+                    const textEstimate = Math.max(12, text.length * 7.5);
+                    const badgeW = Math.max(76, textEstimate + 28);
+                    const badgeH = 18;
+                    const badgeX = anchor.x - 14;
+                    const badgeY = anchor.y - 1;
+                    const box = {{
+                        x: badgeX,
+                        y: badgeY,
+                        width: badgeW,
+                        height: badgeH,
+                    }};
+                    const point = {{
+                        x: box.x + box.width / 2,
+                        y: box.y + box.height / 2,
+                    }};
+                    proxyPoints.set(cluster, point);
+                    proxyBoxes.set(cluster, box);
+
+                    const group = document.createElementNS(SVG_NS, 'g');
+                    group.setAttribute('class', 'collapsed-proxy');
+                    group.style.pointerEvents = 'none';
+
+                    const rect = document.createElementNS(SVG_NS, 'rect');
+                    rect.setAttribute('class', 'collapsed-proxy-badge');
+                    rect.setAttribute('x', String(box.x));
+                    rect.setAttribute('y', String(box.y));
+                    rect.setAttribute('width', String(box.width));
+                    rect.setAttribute('height', String(box.height));
+                    rect.setAttribute('rx', '3');
+
+                    const dot = document.createElementNS(SVG_NS, 'circle');
+                    dot.setAttribute('class', 'collapsed-proxy-dot');
+                    dot.setAttribute('cx', String(box.x + 8));
+                    dot.setAttribute('cy', String(box.y + box.height / 2));
+                    dot.setAttribute('r', '2.2');
+
+                    const textEl = document.createElementNS(SVG_NS, 'text');
+                    textEl.setAttribute('x', String(box.x + 14));
+                    textEl.setAttribute('y', String(box.y + box.height / 2 + 4));
+                    textEl.setAttribute('fill', '#78350f');
+                    textEl.setAttribute('font-size', '14');
+                    textEl.setAttribute('font-weight', '700');
+                    textEl.textContent = text;
+
+                    group.appendChild(rect);
+                    group.appendChild(dot);
+                    group.appendChild(textEl);
+                    group.style.pointerEvents = 'auto';
+                    group.style.cursor = 'pointer';
+                    group.addEventListener('click', (event) => {{
+                        event.stopPropagation();
+                        toggleCluster(cluster);
+                    }});
+                    proxyLayer.appendChild(group);
+                }});
+
+            const seen = new Set();
+            edgeGroups.forEach((edge) => {{
+                const src = edge.dataset.src;
+                const tgt = edge.dataset.tgt;
+                if (!src || !tgt) return;
+                const srcNode = nodeByName.get(src);
+                const tgtNode = nodeByName.get(tgt);
+                const srcVisible = Boolean(srcNode) && isVisible(srcNode);
+                const tgtVisible = Boolean(tgtNode) && isVisible(tgtNode);
+                if (srcVisible && tgtVisible) return;
+                const srcEnd = endpointForNodeName(src);
+                const tgtEnd = endpointForNodeName(tgt);
+                if (!srcEnd || !tgtEnd) return;
+                if (srcEnd.id === tgtEnd.id) return;
+                const key = `${{srcEnd.id}}->${{tgtEnd.id}}`;
+                if (seen.has(key)) return;
+                seen.add(key);
+                const p1 = boxEdgePoint(srcEnd.box, srcEnd.center, tgtEnd.center);
+                const p2 = boxEdgePoint(tgtEnd.box, tgtEnd.center, srcEnd.center);
+                const line = document.createElementNS(SVG_NS, 'line');
+                line.setAttribute('x1', String(p1.x));
+                line.setAttribute('y1', String(p1.y));
+                line.setAttribute('x2', String(p2.x));
+                line.setAttribute('y2', String(p2.y));
+                line.setAttribute('marker-end', 'url(#collapsed-proxy-arrow)');
+                proxyLayer.appendChild(line);
+            }});
+        }};
+
+        const hasCollapsedCluster = (node) => {{
+            for (const cluster of collapsedClusters) {{
+                const key = cluster.dataset.key || '';
+                if (key && nodeInCluster(node, key)) return true;
+            }}
+            return false;
+        }};
+
+        const hasCollapsedAncestorCluster = (cluster) => {{
+            const key = cluster.dataset.key || '';
+            if (!key) return false;
+            for (const parent of collapsedClusters) {{
+                if (parent === cluster) continue;
+                const parentKey = parent.dataset.key || '';
+                if (!parentKey) continue;
+                if (key.startsWith(`${{parentKey}}_`)) return true;
+            }}
+            return false;
+        }};
+
+        const updateVisibility = () => {{
+            clusterGroups.forEach((cluster) => {{
+                if (hasCollapsedAncestorCluster(cluster)) {{
+                    cluster.style.display = 'none';
+                    return;
+                }}
+                cluster.style.display = '';
+                updateClusterLabel(cluster);
+            }});
+
+            nodeGroups.forEach((node) => {{
+                node.style.display = hasCollapsedCluster(node) ? 'none' : '';
+            }});
+
+            edgeGroups.forEach((edge) => {{
+                const src = edge.dataset.src;
+                const tgt = edge.dataset.tgt;
+                const srcNode = nodeByName.get(src);
+                const tgtNode = nodeByName.get(tgt);
+                edge.style.display =
+                    srcNode && tgtNode && isVisible(srcNode) && isVisible(tgtNode)
+                        ? ''
+                        : 'none';
+            }});
+            drawCollapsedProxyEdges();
+        }};
+
+        const expandAllClusters = () => {{
+            collapsedClusters.clear();
+            updateVisibility();
+        }};
+
+        const collapseAllClusters = () => {{
+            clusterGroups
+                .filter((cluster) => (clusterNodeCounts.get(cluster) || 0) > 0)
+                .forEach((cluster) => collapsedClusters.add(cluster));
+            updateVisibility();
+        }};
+
+        const toggleCluster = (cluster) => {{
+            if (collapsedClusters.has(cluster)) {{
+                collapsedClusters.delete(cluster);
+            }} else {{
+                refreshClusterAnchor(cluster);
+                collapsedClusters.add(cluster);
+            }}
+            pinned = null;
+            updateVisibility();
+            clearFocus(true);
+        }};
 
         const applyTransform = () => {{
             viewport.style.transform = `translate(${{originX}}px, ${{originY}}px) scale(${{scale}})`;
@@ -828,8 +1219,12 @@ def _html_with_svg(svg: str, title: str) -> str:
         }};
 
         const focusNode = (name, isPinned = false) => {{
-            const out = outgoing.get(name) || [];
-            const inc = incoming.get(name) || [];
+            const out = (outgoing.get(name) || []).filter(
+                (candidate) => isNodeVisibleByName(candidate)
+            );
+            const inc = (incoming.get(name) || []).filter(
+                (candidate) => isNodeVisibleByName(candidate)
+            );
             const neighbors = new Set([name, ...out, ...inc]);
 
             nodeGroups.forEach((n) => {{
@@ -886,6 +1281,7 @@ def _html_with_svg(svg: str, title: str) -> str:
                 }}
             }});
 
+            const isBidirectional = edgeKeys.has(`${{tgt}}->${{src}}`);
             const pinBadge = isPinned ? '<div class="muted"><strong>Pinned</strong> · click empty space or press Esc to release</div>' : '';
 
             inspector.innerHTML = `
@@ -893,8 +1289,28 @@ def _html_with_svg(svg: str, title: str) -> str:
                 ${{pinBadge}}
                 <div><strong>From:</strong> ${{esc(src)}}</div>
                 <div><strong>To:</strong> ${{esc(tgt)}}</div>
+                <div><strong>Direction:</strong> ${{isBidirectional ? 'bidirectional' : 'one-way'}}</div>
             `;
         }};
+
+        clusterGroups.forEach((cluster) => {{
+            const labelEl = labelTextFor(cluster);
+            if (!labelEl) return;
+            labelEl.addEventListener('click', (event) => {{
+                event.stopPropagation();
+                toggleCluster(cluster);
+            }});
+        }});
+
+        expandAllButton.addEventListener('click', () => {{
+            expandAllClusters();
+            clearFocus(true);
+        }});
+
+        collapseAllButton.addEventListener('click', () => {{
+            collapseAllClusters();
+            clearFocus(true);
+        }});
 
         nodeGroups.forEach((node) => {{
             const name = node.dataset.name;
@@ -927,7 +1343,13 @@ def _html_with_svg(svg: str, title: str) -> str:
         }});
 
         canvas.addEventListener('click', (event) => {{
-            if (event.target.closest('g.node') || event.target.closest('g.edge')) return;
+            if (
+                event.target.closest('g.node')
+                || event.target.closest('g.edge')
+                || event.target.closest('g.cluster')
+            ) {{
+                return;
+            }}
             pinned = null;
             clearFocus(true);
         }});
@@ -963,6 +1385,7 @@ def _html_with_svg(svg: str, title: str) -> str:
         }});
 
         window.addEventListener('resize', fitToView);
+        updateVisibility();
         fitToView();
     </script>
 </body>

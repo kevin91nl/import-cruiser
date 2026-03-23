@@ -354,6 +354,23 @@ def test_config_and_detector_edge_cases() -> None:
     assert detect_cycles(graph) == []
 
 
+def test_drop_dangling_init_modules() -> None:
+    graph = DependencyGraph()
+    graph.add_module(Module(name="pkg", path="/tmp/pkg/__init__.py"))
+    graph.add_module(Module(name="pkg.a", path="/tmp/pkg/a.py"))
+    graph.add_module(Module(name="pkg.b", path="/tmp/pkg/b.py"))
+    graph.add_module(Module(name="orphan", path="/tmp/orphan/__init__.py"))
+    graph.add_dependency(Dependency(source="pkg.a", target="pkg.b", line=1))
+    graph.add_dependency(Dependency(source="pkg.a", target="pkg", line=1))
+
+    trimmed = cli._drop_dangling_init_modules(graph)
+    names = {module.name for module in trimmed.modules}
+    assert "orphan" not in names
+    assert "pkg" in names
+    assert "pkg.a" in names
+    assert "pkg.b" in names
+
+
 def test_exporter_error_and_style_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     graph = DependencyGraph()
     graph.add_module(Module(name="a", path="/tmp/src/a.py"))

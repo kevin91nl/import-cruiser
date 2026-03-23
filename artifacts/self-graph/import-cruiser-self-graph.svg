@@ -9,19 +9,19 @@
 <g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(50.4 477.9)">
 <title>import_cruiser</title>
 <polygon fill="white" stroke="none" points="-25.2,25.2 -25.2,-452.7 630.2,-452.7 630.2,25.2 -25.2,25.2"/>
-<g id="clust1" class="cluster">
+<g id="clust1" class="cluster cluster_key_src">
 <title>cluster_src</title>
 <path fill="white" stroke="black" d="M20,-8C20,-8 585,-8 585,-8 591,-8 597,-14 597,-20 597,-20 597,-407.5 597,-407.5 597,-413.5 591,-419.5 585,-419.5 585,-419.5 20,-419.5 20,-419.5 14,-419.5 8,-413.5 8,-407.5 8,-407.5 8,-20 8,-20 8,-14 14,-8 20,-8"/>
 <text xml:space="preserve" text-anchor="middle" x="302.5" y="-406.95" font-family="Helvetica,sans-Serif" font-size="9.00">src</text>
 </g>
-<g id="clust2" class="cluster">
+<g id="clust2" class="cluster cluster_key_src_import_cruiser">
 <title>cluster_src_import_cruiser</title>
 <path fill="white" stroke="black" d="M60,-48C60,-48 505,-48 505,-48 511,-48 517,-54 517,-60 517,-60 517,-349.75 517,-349.75 517,-355.75 511,-361.75 505,-361.75 505,-361.75 60,-361.75 60,-361.75 54,-361.75 48,-355.75 48,-349.75 48,-349.75 48,-60 48,-60 48,-54 54,-48 60,-48"/>
 <text xml:space="preserve" text-anchor="middle" x="282.5" y="-349.2" font-family="Helvetica,sans-Serif" font-size="9.00">import_cruiser</text>
 </g>
 <!-- __cluster_anchor_src -->
 <!-- import_cruiser.analyzer -->
-<g id="node2" class="node">
+<g id="node2" class="node node_cluster_src_import_cruiser">
 <title>import_cruiser.analyzer</title>
 <g id="a_node2"><a xlink:title="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/analyzer.py">
 <path fill="#dff3f8" stroke="#2f2f2f" d="M375.75,-214C375.75,-214 334.25,-214 334.25,-214 328.25,-214 322.25,-208 322.25,-202 322.25,-202 322.25,-190 322.25,-190 322.25,-184 328.25,-178 334.25,-178 334.25,-178 375.75,-178 375.75,-178 381.75,-178 387.75,-184 387.75,-190 387.75,-190 387.75,-202 387.75,-202 387.75,-208 381.75,-214 375.75,-214"/>
@@ -30,7 +30,7 @@
 </g>
 </g>
 <!-- import_cruiser.graph -->
-<g id="node7" class="node">
+<g id="node7" class="node node_cluster_src_import_cruiser">
 <title>import_cruiser.graph</title>
 <g id="a_node7"><a xlink:title="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/graph.py">
 <path fill="#dff3f8" stroke="#2f2f2f" d="M311,-124C311,-124 281,-124 281,-124 275,-124 269,-118 269,-112 269,-112 269,-100 269,-100 269,-94 275,-88 281,-88 281,-88 311,-88 311,-88 317,-88 323,-94 323,-100 323,-100 323,-112 323,-112 323,-118 317,-124 311,-124"/>
@@ -45,7 +45,7 @@
 <polygon fill="#b0b0b0" stroke="#b0b0b0" points="329,-128.93 322.38,-125.58 325.47,-132.32 329,-128.93"/>
 </g>
 <!-- import_cruiser.cli -->
-<g id="node3" class="node">
+<g id="node3" class="node node_cluster_src_import_cruiser">
 <title>import_cruiser.cli</title>
 <g id="a_node3"><a xlink:title="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/cli.py">
 <path fill="#dff3f8" stroke="#2f2f2f" d="M253,-304C253,-304 223,-304 223,-304 217,-304 211,-298 211,-292 211,-292 211,-280 211,-280 211,-274 217,-268 223,-268 223,-268 253,-268 253,-268 259,-268 265,-274 265,-280 265,-280 265,-292 265,-292 265,-298 259,-304 253,-304"/>
@@ -60,7 +60,7 @@
 <polygon fill="#b0b0b0" stroke="#b0b0b0" points="335.02,-222.37 337.83,-215.51 331.35,-219.12 335.02,-222.37"/>
 </g>
 <!-- import_cruiser.config -->
-<g id="node4" class="node">
+<g id="node4" class="node node_cluster_src_import_cruiser">
 <title>import_cruiser.config</title>
 <g id="a_node4"><a xlink:title="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/config.py">
 <path fill="#dff3f8" stroke="#2f2f2f" d="M147.88,-124C147.88,-124 116.12,-124 116.12,-124 110.12,-124 104.12,-118 104.12,-112 104.12,-112 104.12,-100 104.12,-100 104.12,-94 110.12,-88 116.12,-88 116.12,-88 147.88,-88 147.88,-88 153.88,-88 159.88,-94 159.88,-100 159.88,-100 159.88,-112 159.88,-112 159.88,-118 153.88,-124 147.88,-124"/>
@@ -75,7 +75,7 @@
 <polygon fill="#b0b0b0" stroke="#b0b0b0" points="138.27,-132.26 134.81,-125.71 133.43,-132.99 138.27,-132.26"/>
 </g>
 <!-- import_cruiser.exporter -->
-<g id="node6" class="node">
+<g id="node6" class="node node_cluster_src_import_cruiser">
 <title>import_cruiser.exporter</title>
 <g id="a_node6"><a xlink:title="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/exporter.py">
 <path fill="#dff3f8" stroke="#2f2f2f" d="M258,-214C258,-214 218,-214 218,-214 212,-214 206,-208 206,-202 206,-202 206,-190 206,-190 206,-184 212,-178 218,-178 218,-178 258,-178 258,-178 264,-178 270,-184 270,-190 270,-190 270,-202 270,-202 270,-208 264,-214 258,-214"/>
@@ -96,7 +96,7 @@
 <polygon fill="#b0b0b0" stroke="#b0b0b0" points="276.65,-132.5 279.28,-125.57 272.9,-129.35 276.65,-132.5"/>
 </g>
 <!-- import_cruiser.validator -->
-<g id="node8" class="node">
+<g id="node8" class="node node_cluster_src_import_cruiser">
 <title>import_cruiser.validator</title>
 <g id="a_node8"><a xlink:title="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/validator.py">
 <path fill="#dff3f8" stroke="#2f2f2f" d="M168.75,-214C168.75,-214 127.25,-214 127.25,-214 121.25,-214 115.25,-208 115.25,-202 115.25,-202 115.25,-190 115.25,-190 115.25,-184 121.25,-178 127.25,-178 127.25,-178 168.75,-178 168.75,-178 174.75,-178 180.75,-184 180.75,-190 180.75,-190 180.75,-202 180.75,-202 180.75,-208 174.75,-214 168.75,-214"/>
@@ -111,7 +111,7 @@
 <polygon fill="#b0b0b0" stroke="#b0b0b0" points="161.05,-221.03 155.98,-215.61 156.56,-223.01 161.05,-221.03"/>
 </g>
 <!-- import_cruiser.detector -->
-<g id="node5" class="node">
+<g id="node5" class="node node_cluster_src_import_cruiser">
 <title>import_cruiser.detector</title>
 <g id="a_node5"><a xlink:title="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/detector.py">
 <path fill="#dff3f8" stroke="#2f2f2f" d="M465,-214C465,-214 425,-214 425,-214 419,-214 413,-208 413,-202 413,-202 413,-190 413,-190 413,-184 419,-178 425,-178 425,-178 465,-178 465,-178 471,-178 477,-184 477,-190 477,-190 477,-202 477,-202 477,-208 471,-214 465,-214"/>
