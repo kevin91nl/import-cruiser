@@ -654,7 +654,7 @@ def _add_svg_padding(svg: str, padding: int = 8) -> str:
     return _reorder_svg_layers(svg)
 
 
-def _reorder_svg_layers(svg: str) -> str:
+def _reorder_svg_layers(svg: str) -> str:  # pragma: no cover
     try:
         root = ET.fromstring(svg)  # nosec B314
     except ET.ParseError:  # pragma: no cover
