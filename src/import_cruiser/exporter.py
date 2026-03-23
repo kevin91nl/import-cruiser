@@ -562,16 +562,16 @@ def _style_attrs(style: str, rankdir: str) -> tuple[str, str, str]:
 
     if style == "cruiser":
         graph_attrs = (
-            f"rankdir={rankdir}, splines=ortho, overlap=false, ranksep=1.25, "
-            'nodesep=0.8, pack=true, packmode="array_u", newrank=true, '
-            "compound=true, "
+            f"rankdir={rankdir}, splines=curved, overlap=false, ranksep=1.05, "
+            'nodesep=0.55, pack=true, packmode="clust", newrank=true, '
+            'compound=true, ratio="compress", '
             'fontname="Helvetica", fontsize=10, bgcolor="white", pad=0.45, margin=0.45'
         )
         node_attrs = (
             'shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, '
             'color="#2F2F2F", fillcolor="#DFF3F8"'
         )
-        edge_attrs = 'color="#B0B0B0", arrowsize=0.7, penwidth=1.1, minlen=2'
+        edge_attrs = 'color="#B0B0B0", arrowsize=0.7'
         return graph_attrs, node_attrs, edge_attrs
 
     if style == "navigator":
