@@ -224,7 +224,7 @@ def export_svg(
         style=style,
         edge_mode=edge_mode,
     )
-    return _add_svg_padding(svg)
+    return _add_svg_padding(svg, reorder_layers=True)
 
 
 def export_html(
@@ -262,7 +262,8 @@ def export_html(
                 cluster_mode=cluster_mode,
                 style=style,
                 edge_mode=edge_mode,
-            )
+            ),
+            reorder_layers=False,
         )
         body = _html_with_svg(svg, graph_name)
     except RuntimeError as exc:
@@ -621,7 +622,9 @@ def _render_dot(dot: str, fmt: str, engine: str = "dot") -> str:
     return result.stdout
 
 
-def _add_svg_padding(svg: str, padding: int = 8) -> str:
+def _add_svg_padding(
+    svg: str, padding: int = 8, *, reorder_layers: bool = False
+) -> str:
     viewbox_match = re.search(
         r'viewBox="([\-0-9.eE]+)\s+([\-0-9.eE]+)\s+([\-0-9.eE]+)\s+([\-0-9.eE]+)"',
         svg,
@@ -651,7 +654,9 @@ def _add_svg_padding(svg: str, padding: int = 8) -> str:
 
     svg = _bump_dimension("width", svg)
     svg = _bump_dimension("height", svg)
-    return _reorder_svg_layers(svg)
+    if reorder_layers:  # pragma: no cover
+        return _reorder_svg_layers(svg)
+    return svg
 
 
 def _reorder_svg_layers(svg: str) -> str:  # pragma: no cover
