@@ -1,5 +1,5 @@
 digraph "import_cruiser" {
-    graph [rankdir=TB, splines=curved, overlap=false, ranksep=1.05, nodesep=0.6, pack=false, newrank=true, concentrate=true, compound=true, ratio="compress", fontname="Helvetica", fontsize=10, bgcolor="white", pad=0.45, margin=0.45];
+    graph [rankdir=TB, splines=ortho, overlap=false, ranksep=1.25, nodesep=0.8, pack=true, packmode="array_u", newrank=true, compound=true, fontname="Helvetica", fontsize=10, bgcolor="white", pad=0.45, margin=0.45];
     node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, color="#2F2F2F", fillcolor="#DFF3F8"];
     edge [color="#B0B0B0", arrowsize=0.7];
 

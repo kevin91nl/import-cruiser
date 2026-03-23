@@ -561,9 +561,9 @@ def _style_attrs(style: str, rankdir: str) -> tuple[str, str, str]:
 
     if style == "cruiser":
         graph_attrs = (
-            f"rankdir={rankdir}, splines=curved, overlap=false, ranksep=1.05, "
-            "nodesep=0.6, pack=false, newrank=true, concentrate=true, "
-            'compound=true, ratio="compress", '
+            f"rankdir={rankdir}, splines=ortho, overlap=false, ranksep=1.25, "
+            'nodesep=0.8, pack=true, packmode="array_u", newrank=true, '
+            "compound=true, "
             'fontname="Helvetica", fontsize=10, bgcolor="white", pad=0.45, margin=0.45'
         )
         node_attrs = (
@@ -762,7 +762,7 @@ def _html_with_svg(svg: str, title: str) -> str:
         }}
         g.cluster > path,
         g.cluster > polygon {{
-            fill: none !important;
+            fill: #ffffff !important;
         }}
         g.cluster > text {{
             cursor: pointer;
@@ -1065,6 +1065,7 @@ def _html_with_svg(svg: str, title: str) -> str:
             proxyLayer.replaceChildren();
             proxyPoints.clear();
             proxyBoxes.clear();
+            const badgeGroups = [];
 
             [...collapsedClusters]
                 .sort((a, b) => (a.dataset.key || '').localeCompare(b.dataset.key || ''))
@@ -1127,7 +1128,7 @@ def _html_with_svg(svg: str, title: str) -> str:
                         event.stopPropagation();
                         toggleCluster(cluster);
                     }});
-                    proxyLayer.appendChild(group);
+                    badgeGroups.push(group);
                 }});
 
             const seen = new Set();
@@ -1157,6 +1158,7 @@ def _html_with_svg(svg: str, title: str) -> str:
                 line.setAttribute('marker-end', 'url(#collapsed-proxy-arrow)');
                 proxyLayer.appendChild(line);
             }});
+            badgeGroups.forEach((group) => proxyLayer.appendChild(group));
         }};
 
         const drawClusterBranchToggles = () => {{
