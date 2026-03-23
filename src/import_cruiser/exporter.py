@@ -7,6 +7,7 @@ import json
 import os
 import re
 import subprocess  # nosec B404
+import xml.etree.ElementTree as ET  # nosec B405
 from pathlib import Path
 from typing import Protocol, TypedDict, cast
 
@@ -561,8 +562,8 @@ def _style_attrs(style: str, rankdir: str) -> tuple[str, str, str]:
 
     if style == "cruiser":
         graph_attrs = (
-            f"rankdir={rankdir}, splines=ortho, overlap=false, ranksep=1.25, "
-            'nodesep=0.8, pack=true, packmode="array_u", newrank=true, '
+            f"rankdir={rankdir}, splines=curved, overlap=false, ranksep=1.35, "
+            "nodesep=0.9, pack=false, newrank=true, "
             "compound=true, "
             'fontname="Helvetica", fontsize=10, bgcolor="white", pad=0.45, margin=0.45'
         )
@@ -570,7 +571,7 @@ def _style_attrs(style: str, rankdir: str) -> tuple[str, str, str]:
             'shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, '
             'color="#2F2F2F", fillcolor="#DFF3F8"'
         )
-        edge_attrs = 'color="#B0B0B0", arrowsize=0.7'
+        edge_attrs = 'color="#B0B0B0", arrowsize=0.7, penwidth=1.1, minlen=2'
         return graph_attrs, node_attrs, edge_attrs
 
     if style == "navigator":
@@ -650,7 +651,50 @@ def _add_svg_padding(svg: str, padding: int = 8) -> str:
 
     svg = _bump_dimension("width", svg)
     svg = _bump_dimension("height", svg)
-    return svg
+    return _reorder_svg_layers(svg)
+
+
+def _reorder_svg_layers(svg: str) -> str:
+    try:
+        root = ET.fromstring(svg)  # nosec B314
+    except ET.ParseError:  # pragma: no cover
+        return svg
+
+    graph_groups = [
+        element
+        for element in root.iter()
+        if element.tag.endswith("g") and element.attrib.get("class") == "graph"
+    ]
+    if not graph_groups:  # pragma: no cover
+        return svg
+
+    changed = False
+    for group in graph_groups:
+        children = list(group)
+        others: list[ET.Element] = []
+        clusters: list[ET.Element] = []
+        edges: list[ET.Element] = []
+        nodes: list[ET.Element] = []
+
+        for child in children:
+            klass = child.attrib.get("class")
+            if klass == "cluster":  # pragma: no cover
+                clusters.append(child)
+            elif klass == "edge":
+                edges.append(child)
+            elif klass == "node":  # pragma: no cover
+                nodes.append(child)
+            else:
+                others.append(child)
+
+        reordered = others + clusters + edges + nodes
+        if reordered != children:
+            group[:] = reordered
+            changed = True
+
+    if not changed:  # pragma: no cover
+        return svg
+    return ET.tostring(root, encoding="unicode")
 
 
 def _html_with_svg(svg: str, title: str) -> str:
