@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "import-cruiser"
-version = "0.2.7"
+version = "0.2.8"
 description = "Analyze, validate, and visualize Python import dependencies — like dependency-cruiser for Python."
 authors = ["kevin91nl"]
 readme = "README.md"

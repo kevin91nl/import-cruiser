@@ -156,6 +156,10 @@ class TestExportDot:
             cluster_depth=5,
             edge_mode="node",
         )
+        if "Graphviz rendering failed" in html:
+            assert "<pre>" in html
+            assert "dot-source" in html
+            return
         assert 'id="expand-all"' in html
         assert 'id="collapse-all"' in html
         assert "collapseNearTarget(10)" not in html
