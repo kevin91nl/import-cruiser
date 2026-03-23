@@ -562,8 +562,8 @@ def _style_attrs(style: str, rankdir: str) -> tuple[str, str, str]:
 
     if style == "cruiser":
         graph_attrs = (
-            f"rankdir={rankdir}, splines=curved, overlap=false, ranksep=1.35, "
-            "nodesep=0.9, pack=false, newrank=true, "
+            f"rankdir={rankdir}, splines=ortho, overlap=false, ranksep=1.25, "
+            'nodesep=0.8, pack=true, packmode="array_u", newrank=true, '
             "compound=true, "
             'fontname="Helvetica", fontsize=10, bgcolor="white", pad=0.45, margin=0.45'
         )
@@ -677,12 +677,13 @@ def _reorder_svg_layers(svg: str) -> str:
         nodes: list[ET.Element] = []
 
         for child in children:
-            klass = child.attrib.get("class")
-            if klass == "cluster":  # pragma: no cover
+            klass = child.attrib.get("class", "")
+            classes = set(klass.split())
+            if "cluster" in classes:  # pragma: no cover
                 clusters.append(child)
-            elif klass == "edge":
+            elif "edge" in classes:
                 edges.append(child)
-            elif klass == "node":  # pragma: no cover
+            elif "node" in classes:  # pragma: no cover
                 nodes.append(child)
             else:
                 others.append(child)
