@@ -426,6 +426,48 @@ def test_exporter_error_and_style_paths(monkeypatch: pytest.MonkeyPatch) -> None
     assert export_svg(graph) == "<svg/>"
     assert "<svg/>" in export_html(graph)
 
+    render_calls: list[str] = []
+
+    def _cluster_then_node(dot: str, *args, **kwargs) -> str:
+        render_calls.append(dot)
+        if "ltail=" in dot:
+            raise RuntimeError("Graphviz rendering failed.")
+        return "<svg/>"
+
+    monkeypatch.setattr(
+        "import_cruiser.exporter._render_dot",
+        _cluster_then_node,
+    )
+    assert (
+        export_svg(
+            cluster_graph,
+            edge_mode="cluster",
+            cluster_depth=1,
+            cluster_mode="module",
+        )
+        == "<svg/>"
+    )
+    assert len(render_calls) == 2
+    assert "ltail=" in render_calls[0]
+    assert "ltail=" not in render_calls[1]
+
+    def _cluster_and_node_fail(dot: str, *args, **kwargs) -> str:
+        if "ltail=" in dot:
+            raise RuntimeError("cluster-fail")
+        raise RuntimeError("node-fail")
+
+    monkeypatch.setattr(
+        "import_cruiser.exporter._render_dot",
+        _cluster_and_node_fail,
+    )
+    with pytest.raises(RuntimeError, match="cluster-fail"):
+        export_svg(
+            cluster_graph,
+            edge_mode="cluster",
+            cluster_depth=1,
+            cluster_mode="module",
+        )
+
     monkeypatch.setattr(
         "import_cruiser.exporter._render_dot",
         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("nope")),

@@ -210,7 +210,19 @@ def export_svg(
         style=style,
         edge_mode=edge_mode,
     )
-    svg = _render_dot(dot, "svg", engine=engine)
+    svg = _render_with_edge_fallback(
+        dot=dot,
+        graph=graph,
+        fmt="svg",
+        engine=engine,
+        graph_name=graph_name,
+        violations=violations,
+        rankdir=rankdir,
+        cluster_depth=cluster_depth,
+        cluster_mode=cluster_mode,
+        style=style,
+        edge_mode=edge_mode,
+    )
     return _add_svg_padding(svg)
 
 
@@ -236,11 +248,60 @@ def export_html(
         edge_mode=edge_mode,
     )
     try:
-        svg = _add_svg_padding(_render_dot(dot, "svg", engine=engine))
+        svg = _add_svg_padding(
+            _render_with_edge_fallback(
+                dot=dot,
+                graph=graph,
+                fmt="svg",
+                engine=engine,
+                graph_name=graph_name,
+                violations=violations,
+                rankdir=rankdir,
+                cluster_depth=cluster_depth,
+                cluster_mode=cluster_mode,
+                style=style,
+                edge_mode=edge_mode,
+            )
+        )
         body = _html_with_svg(svg, graph_name)
     except RuntimeError as exc:
         body = _html_with_fallback(dot, graph_name, str(exc))
     return body
+
+
+def _render_with_edge_fallback(
+    *,
+    dot: str,
+    graph: DependencyGraph,
+    fmt: str,
+    engine: str,
+    graph_name: str,
+    violations: list[ViolationLike] | None,
+    rankdir: str,
+    cluster_depth: int,
+    cluster_mode: str,
+    style: str,
+    edge_mode: str,
+) -> str:
+    try:
+        return _render_dot(dot, fmt, engine=engine)
+    except RuntimeError as exc:
+        if edge_mode != "cluster":
+            raise
+        cluster_safe_dot = export_dot(
+            graph,
+            graph_name=graph_name,
+            violations=violations,
+            rankdir=rankdir,
+            cluster_depth=cluster_depth,
+            cluster_mode=cluster_mode,
+            style=style,
+            edge_mode="node",
+        )
+        try:
+            return _render_dot(cluster_safe_dot, fmt, engine=engine)
+        except RuntimeError:
+            raise exc
 
 
 def _dot_id(name: str) -> str:
