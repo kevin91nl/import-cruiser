@@ -95,7 +95,7 @@ repos:
         always_run: true
       - id: refresh-self-graph
         name: Refresh self-graph artifacts
-        entry: make self-graph
+        entry: scripts/refresh_self_graph.sh
         language: system
         pass_filenames: false
         always_run: true
