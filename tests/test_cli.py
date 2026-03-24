@@ -304,7 +304,7 @@ class TestExportCommand:
         assert "ltail=" not in result.output
         assert "lhead=" not in result.output
 
-    def test_export_default_style_is_cruiser_with_deeper_clusters(
+    def test_export_default_style_is_depcruise_with_deeper_clusters(
         self, tmp_path: Path
     ) -> None:
         pkg = tmp_path / "src" / "mypkg" / "modules" / "company_events"
@@ -343,8 +343,11 @@ class TestExportCommand:
             ],
         )
         assert result.exit_code == 0, result.output
-        assert "rankdir=TB" in result.output
-        assert "cluster_src_mypkg_modules_company_events" in result.output
+        assert 'rankdir="LR"' in result.output
+        assert (
+            '"src/mypkg/modules/company_events/api.py" -> "src/mypkg/modules/company_events/model.py"'
+            in result.output
+        )
 
     def test_export_default_style_auto_fallback_for_default_style(
         self, sample_project: Path

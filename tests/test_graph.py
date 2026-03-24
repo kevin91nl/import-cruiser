@@ -7,6 +7,7 @@ from import_cruiser.graph import (
     Module,
     collapse_graph,
     filter_graph,
+    prune_orphan_init_modules,
 )
 
 
@@ -104,3 +105,25 @@ class TestGraphCollapse:
         collapsed = collapse_graph(g, depth=1)
         assert {m.name for m in collapsed.modules} == {"pkg", "other"}
         assert set(collapsed.edges()) == {("pkg", "other")}
+
+
+class TestPruneOrphanInitModules:
+    def test_prunes_orphan_init_module(self) -> None:
+        g = DependencyGraph()
+        g.add_module(Module(name="pkg", path="/repo/pkg/__init__.py"))
+        g.add_module(Module(name="pkg.mod", path="/repo/pkg/mod.py"))
+
+        pruned = prune_orphan_init_modules(g)
+
+        assert {m.name for m in pruned.modules} == {"pkg.mod"}
+
+    def test_keeps_init_when_connected(self) -> None:
+        g = DependencyGraph()
+        g.add_module(Module(name="pkg", path="/repo/pkg/__init__.py"))
+        g.add_module(Module(name="pkg.mod", path="/repo/pkg/mod.py"))
+        g.add_dependency(Dependency(source="pkg", target="pkg.mod"))
+
+        pruned = prune_orphan_init_modules(g)
+
+        assert {m.name for m in pruned.modules} == {"pkg", "pkg.mod"}
+        assert set(pruned.edges()) == {("pkg", "pkg.mod")}

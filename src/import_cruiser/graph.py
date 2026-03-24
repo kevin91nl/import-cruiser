@@ -208,6 +208,22 @@ def collapse_graph(graph: DependencyGraph, depth: int) -> DependencyGraph:
     return collapsed
 
 
+def prune_orphan_init_modules(graph: DependencyGraph) -> DependencyGraph:
+    """Remove modules backed by ``__init__.py`` files that have no edges."""
+    module_map = {m.name: m for m in graph.modules}
+    connected: set[str] = set()
+    for dep in graph.dependencies:
+        connected.add(dep.source)
+        connected.add(dep.target)
+
+    allowed = {
+        name
+        for name, module in module_map.items()
+        if Path(module.path).name != "__init__.py" or name in connected
+    }
+    return _subgraph(graph, module_map, allowed)
+
+
 def aggregate_by_path(
     graph: DependencyGraph,
     depth: int,

@@ -26,6 +26,7 @@ from import_cruiser.graph import (
     collapse_graph,
     detect_cycles,
     filter_graph,
+    prune_orphan_init_modules,
 )
 from import_cruiser.validator import Validator, Violation
 
@@ -75,9 +76,10 @@ def main() -> None:
 @click.option(
     "--style",
     type=click.Choice(
-        ["default", "archi", "cruiser", "navigator"], case_sensitive=False
+        ["default", "archi", "cruiser", "navigator", "depcruise"],
+        case_sensitive=False,
     ),
-    default="cruiser",
+    default="depcruise",
     show_default=True,
     help="Graph styling preset.",
 )
@@ -358,9 +360,10 @@ def cmd_validate(
 @click.option(
     "--style",
     type=click.Choice(
-        ["default", "archi", "cruiser", "navigator"], case_sensitive=False
+        ["default", "archi", "cruiser", "navigator", "depcruise"],
+        case_sensitive=False,
     ),
-    default="cruiser",
+    default="depcruise",
     show_default=True,
     help="Graph styling preset.",
 )
@@ -628,7 +631,8 @@ def _apply_graph_options(
         edge_mode = "node"
 
     collapsed = collapse_graph(filtered, collapse_depth)
-    return collapsed, layout, rankdir, cluster_depth, cluster_mode, style, edge_mode
+    pruned = prune_orphan_init_modules(collapsed)
+    return pruned, layout, rankdir, cluster_depth, cluster_mode, style, edge_mode
 
 
 def _export_svg(

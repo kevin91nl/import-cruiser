@@ -10,7 +10,7 @@ import subprocess  # nosec B404
 from pathlib import Path
 from typing import Protocol, TypedDict, cast
 
-from import_cruiser.graph import DependencyGraph, Module, detect_cycles
+from import_cruiser.graph import Dependency, DependencyGraph, Module, detect_cycles
 
 JSONDict = dict[str, object]
 
@@ -78,7 +78,7 @@ def export_dot(
     rankdir: str = "LR",
     cluster_depth: int = 2,
     cluster_mode: str = "path",
-    style: str = "default",
+    style: str = "depcruise",
     edge_mode: str = "node",
 ) -> str:
     """Return a DOT-format string representing the dependency graph."""
@@ -90,8 +90,76 @@ def export_dot(
     violation_edges = _edges_from_violations(violations)
 
     graph_attrs, node_attrs, edge_attrs = _style_attrs(style, rankdir)
+    depcruise = style == "depcruise"
+    node_id_map: dict[str, str] = {}
+    path_root = _common_root(graph.modules) if cluster_mode == "path" else None
+    lines = _init_dot_lines(
+        graph_name=graph_name,
+        graph_attrs=graph_attrs,
+        node_attrs=node_attrs,
+        edge_attrs=edge_attrs,
+        depcruise=depcruise,
+    )
 
-    lines: list[str] = [
+    node_to_cluster: dict[str, str] = {}
+    cluster_index: dict[str, list[str]] = {}
+    if depcruise:
+        _append_depcruise_nodes(
+            lines=lines,
+            modules=graph.modules,
+            node_id_map=node_id_map,
+            path_root=path_root,
+        )
+    else:
+        node_to_cluster, cluster_index = _append_standard_nodes(
+            lines=lines,
+            modules=graph.modules,
+            cycle_nodes=cycle_nodes,
+            cluster_depth=cluster_depth,
+            cluster_mode=cluster_mode,
+            style=style,
+            path_root=path_root,
+        )
+
+    if not depcruise and edge_mode == "cluster" and cluster_depth > 0:
+        edge_mode = _append_cluster_edges(
+            lines=lines,
+            dependencies=graph.dependencies,
+            node_to_cluster=node_to_cluster,
+            cluster_index=cluster_index,
+            edge_mode=edge_mode,
+        )
+
+    if edge_mode != "cluster" or depcruise:
+        _append_dependency_edges(
+            lines=lines,
+            dependencies=graph.dependencies,
+            node_id_map=node_id_map,
+            violation_edges=violation_edges,
+            cycle_edges=cycle_edges,
+            depcruise=depcruise,
+        )
+
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def _init_dot_lines(
+    graph_name: str,
+    graph_attrs: str,
+    node_attrs: str,
+    edge_attrs: str,
+    depcruise: bool,
+) -> list[str]:
+    if depcruise:
+        return [
+            f'strict digraph "{graph_name}"{{',
+            f"    {graph_attrs}",
+            f"    node [{node_attrs}]",
+            f"    edge [{edge_attrs}]",
+            "",
+        ]
+    return [
         f'digraph "{graph_name}" {{',
         f"    graph [{graph_attrs}];",
         f"    node [{node_attrs}];",
@@ -99,18 +167,39 @@ def export_dot(
         "",
     ]
 
+
+def _append_depcruise_nodes(
+    lines: list[str],
+    modules: list[Module],
+    node_id_map: dict[str, str],
+    path_root: str | None,
+) -> None:
+    for module in sorted(modules, key=lambda m: m.name):
+        node_id = _depcruise_node_id(module, path_root)
+        node_id_map[module.name] = node_id
+        lines.append(_depcruise_cluster_line(module, node_id, path_root))
+    if modules:
+        lines.append("")
+
+
+def _append_standard_nodes(
+    lines: list[str],
+    modules: list[Module],
+    cycle_nodes: set[str],
+    cluster_depth: int,
+    cluster_mode: str,
+    style: str,
+    path_root: str | None,
+) -> tuple[dict[str, str], dict[str, list[str]]]:
     cluster_index: dict[str, list[str]] = {}
     node_to_cluster: dict[str, str] = {}
-    valid_cluster_keys: set[str] = set()
-
-    path_root = _common_root(graph.modules) if cluster_mode == "path" else None
+    root_modules: list[Module]
 
     if cluster_depth > 0:
         root_clusters, root_modules, flat_clusters = _build_clusters(
-            graph.modules, cluster_depth, cluster_mode
+            modules, cluster_depth, cluster_mode
         )
         non_empty_clusters = _non_empty_clusters(flat_clusters)
-        valid_cluster_keys = set(non_empty_clusters)
         lines.extend(
             _render_cluster_tree(
                 root_clusters,
@@ -119,9 +208,10 @@ def export_dot(
                 indent="    ",
                 mode=cluster_mode,
                 allowed=non_empty_clusters,
+                style=style,
             )
         )
-        for module in graph.modules:
+        for module in modules:
             cluster_key = _node_cluster_key(
                 module.name,
                 module.path,
@@ -129,11 +219,11 @@ def export_dot(
                 cluster_depth,
                 path_root,
             )
-            if cluster_key and cluster_key in valid_cluster_keys:
+            if cluster_key and cluster_key in non_empty_clusters:
                 node_to_cluster[module.name] = cluster_key
                 cluster_index.setdefault(cluster_key, []).append(module.name)
     else:
-        root_modules = sorted(graph.modules, key=lambda m: m.name)
+        root_modules = sorted(modules, key=lambda m: m.name)
 
     for module in root_modules:
         lines.extend(
@@ -149,44 +239,60 @@ def export_dot(
     if root_modules:
         lines.append("")
 
-    if edge_mode == "cluster" and cluster_depth > 0:
-        cluster_edges: set[tuple[str, str]] = set()
-        for dep in graph.dependencies:
-            src_cluster = node_to_cluster.get(dep.source)
-            tgt_cluster = node_to_cluster.get(dep.target)
-            if not src_cluster or not tgt_cluster or src_cluster == tgt_cluster:
-                continue
-            if _clusters_related(src_cluster, tgt_cluster):
-                continue
-            cluster_edges.add((src_cluster, tgt_cluster))
+    return node_to_cluster, cluster_index
 
-        if cluster_edges:
-            for src_cluster, tgt_cluster in sorted(cluster_edges):
-                src_node = cluster_index[src_cluster][0]
-                tgt_node = cluster_index[tgt_cluster][0]
-                lines.append(
-                    f"    {_dot_id(src_node)} -> {_dot_id(tgt_node)} "
-                    f'[ltail="cluster_{_cluster_id(src_cluster)}", '
-                    f'lhead="cluster_{_cluster_id(tgt_cluster)}"];'
-                )
+
+def _append_cluster_edges(
+    lines: list[str],
+    dependencies: list[Dependency],
+    node_to_cluster: dict[str, str],
+    cluster_index: dict[str, list[str]],
+    edge_mode: str,
+) -> str:
+    cluster_edges: set[tuple[str, str]] = set()
+    for dep in dependencies:
+        src_cluster = node_to_cluster.get(dep.source)
+        tgt_cluster = node_to_cluster.get(dep.target)
+        if not src_cluster or not tgt_cluster or src_cluster == tgt_cluster:
+            continue
+        if _clusters_related(src_cluster, tgt_cluster):
+            continue
+        cluster_edges.add((src_cluster, tgt_cluster))
+
+    if not cluster_edges:
+        return "node"
+
+    for src_cluster, tgt_cluster in sorted(cluster_edges):
+        src_node = cluster_index[src_cluster][0]
+        tgt_node = cluster_index[tgt_cluster][0]
+        lines.append(
+            f"    {_dot_id(src_node)} -> {_dot_id(tgt_node)} "
+            f'[ltail="cluster_{_cluster_id(src_cluster)}", '
+            f'lhead="cluster_{_cluster_id(tgt_cluster)}"];'
+        )
+    return edge_mode
+
+
+def _append_dependency_edges(
+    lines: list[str],
+    dependencies: list[Dependency],
+    node_id_map: dict[str, str],
+    violation_edges: dict[tuple[str, str], ViolationLike],
+    cycle_edges: set[tuple[str, str]],
+    depcruise: bool,
+) -> None:
+    for dep in sorted(dependencies, key=lambda d: (d.source, d.target)):
+        src = _dot_id(node_id_map.get(dep.source, dep.source))
+        tgt = _dot_id(node_id_map.get(dep.target, dep.target))
+        violation = violation_edges.get((dep.source, dep.target))
+        if violation and not depcruise:
+            color = _severity_color(violation.severity)
+            lines.append(f'    {src} -> {tgt} [color="{color}", penwidth=2.2];')
+        elif (dep.source, dep.target) in cycle_edges and not depcruise:
+            lines.append(f'    {src} -> {tgt} [color="#C0392B", penwidth=1.6];')
         else:
-            edge_mode = "node"
-
-    if edge_mode != "cluster":
-        for dep in sorted(graph.dependencies, key=lambda d: (d.source, d.target)):
-            src = _dot_id(dep.source)
-            tgt = _dot_id(dep.target)
-            violation = violation_edges.get((dep.source, dep.target))
-            if violation:
-                color = _severity_color(violation.severity)
-                lines.append(f'    {src} -> {tgt} [color="{color}", penwidth=2.2];')
-            elif (dep.source, dep.target) in cycle_edges:
-                lines.append(f'    {src} -> {tgt} [color="#C0392B", penwidth=1.6];')
-            else:
-                lines.append(f"    {src} -> {tgt};")
-
-    lines.append("}")
-    return "\n".join(lines)
+            suffix = "" if depcruise else ";"
+            lines.append(f"    {src} -> {tgt}{suffix}")
 
 
 def export_svg(
@@ -197,7 +303,7 @@ def export_svg(
     rankdir: str = "LR",
     cluster_depth: int = 2,
     cluster_mode: str = "path",
-    style: str = "default",
+    style: str = "depcruise",
     edge_mode: str = "node",
 ) -> str:
     dot = export_dot(
@@ -234,7 +340,7 @@ def export_html(
     rankdir: str = "LR",
     cluster_depth: int = 2,
     cluster_mode: str = "path",
-    style: str = "default",
+    style: str = "depcruise",
     edge_mode: str = "node",
 ) -> str:
     dot = export_dot(
@@ -307,6 +413,50 @@ def _render_with_edge_fallback(
 def _dot_id(name: str) -> str:
     """Convert a dotted module name to a valid DOT identifier."""
     return '"' + name.replace('"', '\\"') + '"'
+
+
+def _depcruise_node_id(module: Module, root: str | None) -> str:
+    if not module.path:
+        return module.name
+    try:
+        path = Path(module.path).resolve()
+        if root:
+            path = path.relative_to(root)
+        return str(path).replace("\\", "/")
+    except ValueError:
+        return module.path.replace("\\", "/")
+
+
+def _depcruise_cluster_line(module: Module, node_id: str, root: str | None) -> str:
+    label = Path(module.path).name if module.path else module.name
+    rel_path = node_id if module.path else module.name
+    parts: list[str] = []
+    if module.path:
+        try:
+            path = Path(module.path).resolve()
+            if root:
+                path = path.relative_to(root)
+            parts = list(path.parts[:-1])
+        except ValueError:
+            parts = list(Path(module.path).parts[:-1])
+
+    if not parts:
+        return (
+            f'    {_dot_id(node_id)} [label=<{label}> tooltip="{label}" '
+            f'URL="{rel_path}" ]'
+        )
+
+    line = f'    subgraph "cluster_{parts[0]}" {{label="{parts[0]}" '
+    prefix = parts[0]
+    for part in parts[1:]:
+        prefix = f"{prefix}/{part}"
+        line += f'subgraph "cluster_{prefix}" {{label="{part}" '
+
+    line += (
+        f'{_dot_id(node_id)} [label=<{label}> tooltip="{label}" ' f'URL="{rel_path}" ] '
+    )
+    line += "}" * len(parts)
+    return line
 
 
 def _dot_node_lines(
@@ -382,6 +532,7 @@ def _render_cluster_tree(
     indent: str,
     mode: str,
     allowed: set[str],
+    style: str,
 ) -> list[str]:
     lines: list[str] = []
 
@@ -394,17 +545,18 @@ def _render_cluster_tree(
         cid = _cluster_id(cluster["id"])
         lines.append(f'{level_indent}subgraph "cluster_{cid}" {{')
         lines.append(f'{level_indent}    label="{cluster["label"]}";')
-        lines.append(f"{level_indent}    margin=40;")
-        lines.append(f'{level_indent}    color="black";')
-        lines.append(f"{level_indent}    penwidth=1.0;")
-        lines.append(f'{level_indent}    style="rounded,bold";')
-        lines.append(f'{level_indent}    fontname="Helvetica";')
-        lines.append(f"{level_indent}    fontsize=9;")
+        if style != "depcruise":
+            lines.append(f"{level_indent}    margin=6;")
+            lines.append(f'{level_indent}    color="black";')
+            lines.append(f"{level_indent}    penwidth=1.0;")
+            lines.append(f'{level_indent}    style="rounded,bold";')
+            lines.append(f'{level_indent}    fontname="Helvetica";')
+            lines.append(f"{level_indent}    fontsize=9;")
 
         allowed_children = [
             child for child in children_of(cluster["id"]) if child["id"] in allowed
         ]
-        if not cluster["modules"] and allowed_children:
+        if style != "depcruise" and not cluster["modules"] and allowed_children:
             anchor_id = _dot_id(f"__cluster_anchor_{cid}")
             lines.append(
                 f"{level_indent}    {anchor_id} "
@@ -540,12 +692,28 @@ def _severity_color(severity: str) -> str:
 
 
 def _style_attrs(style: str, rankdir: str) -> tuple[str, str, str]:
+    if style == "depcruise":
+        graph_attrs = (
+            f'rankdir="{rankdir}" splines="true" overlap="false" nodesep="0.16" '
+            'ranksep="0.18" fontname="Helvetica-bold" fontsize="9" '
+            'style="rounded,bold,filled" fillcolor="#ffffff" compound="true"'
+        )
+        node_attrs = (
+            'shape="box" style="rounded, filled" height="0.2" color="black" '
+            'fillcolor="#ffffcc" fontcolor="black" fontname="Helvetica" fontsize="9"'
+        )
+        edge_attrs = (
+            'arrowhead="normal" arrowsize="0.6" penwidth="2.0" '
+            'color="#00000033" fontname="Helvetica" fontsize="9"'
+        )
+        return graph_attrs, node_attrs, edge_attrs
+
     if style == "archi":
         graph_attrs = (
-            f"rankdir={rankdir}, splines=ortho, overlap=false, ranksep=0.9, "
-            'nodesep=0.45, pack=true, packmode="array_u", newrank=true, '
+            f"rankdir={rankdir}, splines=ortho, overlap=false, ranksep=0.55, "
+            'nodesep=0.28, pack=true, packmode="array_u", newrank=true, '
             'compound=true, ratio="compress", '
-            'fontname="Helvetica", fontsize=10, bgcolor="white", pad=0.35, margin=0.35'
+            'fontname="Helvetica", fontsize=10, bgcolor="white", pad=0.18, margin=0.18'
         )
         node_attrs = (
             'shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, '
@@ -556,10 +724,10 @@ def _style_attrs(style: str, rankdir: str) -> tuple[str, str, str]:
 
     if style == "cruiser":
         graph_attrs = (
-            f"rankdir={rankdir}, splines=curved, overlap=false, ranksep=0.75, "
-            'nodesep=0.35, pack=true, packmode="clust", newrank=true, '
+            f"rankdir={rankdir}, splines=curved, overlap=false, ranksep=0.5, "
+            'nodesep=0.25, pack=true, packmode="clust", newrank=true, '
             'compound=true, ratio="compress", '
-            'fontname="Helvetica", fontsize=10, bgcolor="white", pad=0.35, margin=0.35'
+            'fontname="Helvetica", fontsize=10, bgcolor="white", pad=0.18, margin=0.18'
         )
         node_attrs = (
             'shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, '
@@ -570,10 +738,10 @@ def _style_attrs(style: str, rankdir: str) -> tuple[str, str, str]:
 
     if style == "navigator":
         graph_attrs = (
-            f"rankdir={rankdir}, splines=curved, overlap=prism, ranksep=0.9, "
-            'nodesep=0.5, pack=true, packmode="clust", newrank=true, '
+            f"rankdir={rankdir}, splines=curved, overlap=prism, ranksep=0.55, "
+            'nodesep=0.32, pack=true, packmode="clust", newrank=true, '
             'compound=true, ratio="compress", '
-            'fontname="Helvetica", fontsize=10, bgcolor="white", pad=0.35, margin=0.35'
+            'fontname="Helvetica", fontsize=10, bgcolor="white", pad=0.18, margin=0.18'
         )
         node_attrs = (
             'shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, '
@@ -583,10 +751,10 @@ def _style_attrs(style: str, rankdir: str) -> tuple[str, str, str]:
         return graph_attrs, node_attrs, edge_attrs
 
     graph_attrs = (
-        f"rankdir={rankdir}, splines=curved, overlap=false, nodesep=0.16, ranksep=0.18, "
+        f"rankdir={rankdir}, splines=curved, overlap=false, nodesep=0.12, ranksep=0.12, "
         'fontname="Helvetica-bold", fontsize=9, style="rounded,bold,filled", '
         'fillcolor="#FFFFFF", compound=true, pack=true, packmode="array_u", '
-        'newrank=true, ratio="compress", pad=0.35, margin=0.35'
+        'newrank=true, ratio="compress", pad=0.18, margin=0.18'
     )
     node_attrs = (
         'shape=box, style="rounded,filled", height=0.2, color="black", '
@@ -659,6 +827,9 @@ def _html_with_svg(svg: str, title: str) -> str:
     <style>
         :root {{
             color-scheme: only light;
+            --header-h: 44px;
+            --toolbar-h: 48px;
+            --footer-h: 28px;
         }}
         body {{
             margin: 0;
@@ -672,10 +843,55 @@ def _html_with_svg(svg: str, title: str) -> str:
             color: #f9fafb;
             font-size: 14px;
             letter-spacing: 0.02em;
+            height: var(--header-h);
+            box-sizing: border-box;
+        }}
+        .toolbar {{
+            height: var(--toolbar-h);
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-bottom: 1px solid #e5e7eb;
+            background: #ffffff;
+        }}
+        .toolbar .spacer {{
+            flex: 1;
+        }}
+        .toolbar input[type="search"] {{
+            height: 30px;
+            min-width: 280px;
+            padding: 0 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 12px;
+        }}
+        .toolbar button {{
+            height: 30px;
+            padding: 0 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            background: #ffffff;
+            font-size: 12px;
+            cursor: pointer;
+            white-space: nowrap;
+        }}
+        .toolbar button:hover {{
+            background: #f9fafb;
+        }}
+        .toolbar .badge {{
+            font-size: 11px;
+            color: #374151;
+            border: 1px solid #d1d5db;
+            border-radius: 999px;
+            padding: 3px 8px;
+            background: #f9fafb;
+            white-space: nowrap;
         }}
         .canvas {{
             width: 100vw;
-            height: calc(100vh - 44px);
+            height: calc(100vh - var(--header-h) - var(--toolbar-h) - var(--footer-h));
             overflow: hidden;
             position: relative;
             background: radial-gradient(circle at 20% 20%, #ffffff 0%, #f4f4f4 45%, #e8e8e8 100%);
@@ -693,7 +909,7 @@ def _html_with_svg(svg: str, title: str) -> str:
             top: 12px;
             right: 12px;
             width: min(360px, 40vw);
-            max-height: calc(100vh - 90px);
+            max-height: calc(100vh - var(--header-h) - var(--toolbar-h) - 40px);
             overflow: auto;
             background: rgba(255, 255, 255, 0.95);
             border: 1px solid #d1d5db;
@@ -715,9 +931,27 @@ def _html_with_svg(svg: str, title: str) -> str:
             margin: 4px 0 8px 16px;
             padding: 0;
         }}
+        .footer {{
+            height: var(--footer-h);
+            box-sizing: border-box;
+            border-top: 1px solid #e5e7eb;
+            background: #ffffff;
+            padding: 6px 12px;
+            font-size: 11px;
+            color: #4b5563;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }}
         .dimmed {{
             opacity: 0.14;
             transition: opacity 0.08s ease-out;
+        }}
+        g.node.search-match > polygon,
+        g.node.search-match > ellipse,
+        g.node.search-match > rect {{
+            stroke: #059669;
+            stroke-width: 2.2px;
         }}
         g.node.active > polygon,
         g.node.active > ellipse,
@@ -743,18 +977,34 @@ def _html_with_svg(svg: str, title: str) -> str:
 </head>
 <body>
     <header>{display_title}</header>
+    <div class="toolbar">
+        <button id="btn-fit" title="Fit graph to viewport (F)">Fit</button>
+        <button id="btn-reset-zoom" title="Reset zoom to 100% (0)">100%</button>
+        <button id="btn-zoom-in" title="Zoom in (+)">+</button>
+        <button id="btn-zoom-out" title="Zoom out (-)">-</button>
+        <button id="btn-clear-focus" title="Clear current pin/focus (Esc)">Clear focus</button>
+        <input id="search" type="search" placeholder="Search module/path… (/)">
+        <span class="badge" id="search-count">0 matches</span>
+        <span class="spacer"></span>
+        <span class="badge" id="repo-badge">Repos: detecting…</span>
+    </div>
     <div class="canvas" id="canvas">
         <div class="viewport" id="viewport">{svg}</div>
         <aside id="inspector">
             <h4>Context</h4>
-            <div class="muted">Hover a module or dependency edge to see context.</div>
+            <div class="muted">Click a node or edge to pin details.</div>
         </aside>
     </div>
+    <div class="footer" id="footer">Ready</div>
     <script>
         const canvas = document.getElementById('canvas');
         const viewport = document.getElementById('viewport');
         const svg = viewport.querySelector('svg');
         const inspector = document.getElementById('inspector');
+        const footer = document.getElementById('footer');
+        const searchInput = document.getElementById('search');
+        const searchCount = document.getElementById('search-count');
+        const repoBadge = document.getElementById('repo-badge');
         let scale = 1;
         let originX = 0;
         let originY = 0;
@@ -762,6 +1012,8 @@ def _html_with_svg(svg: str, title: str) -> str:
         let startX = 0;
         let startY = 0;
         let pinned = null;
+        let searchResults = [];
+        let searchIndex = -1;
 
         const esc = (text) => String(text)
             .replaceAll('&', '&amp;')
@@ -770,12 +1022,15 @@ def _html_with_svg(svg: str, title: str) -> str:
             .replaceAll('"', '&quot;')
             .replaceAll("'", '&#39;');
 
-        const titleOf = (group) => group?.querySelector('title')?.textContent?.trim() || '';
+        const titleOf = (group) =>
+            group?.querySelector('title')?.textContent?.trim() || '';
         const nodeGroups = [...svg.querySelectorAll('g.node')];
         const edgeGroups = [...svg.querySelectorAll('g.edge')];
         const nodeByName = new Map();
         const outgoing = new Map();
         const incoming = new Map();
+        const repos = new Set();
+        const packageRoots = new Set();
 
         nodeGroups.forEach((node) => {{
             const name = titleOf(node);
@@ -783,7 +1038,25 @@ def _html_with_svg(svg: str, title: str) -> str:
             nodeByName.set(name, node);
             outgoing.set(name, []);
             incoming.set(name, []);
+            const topPackage = (name.split('.')[0] || '').trim();
+            if (topPackage) packageRoots.add(topPackage);
+            const path =
+                node.querySelector('a')?.getAttribute('xlink:title') ||
+                node.querySelector('a')?.getAttribute('title') ||
+                '';
+            node.dataset.path = path;
+            if (path.includes('/riskstudio-worker/')) repos.add('riskstudio-worker');
+            if (path.includes('/riskstudio-sdk/')) repos.add('riskstudio-sdk');
         }});
+
+        if (repos.size) {{
+            repoBadge.textContent = `Repos: ${{[...repos].sort().join(', ')}}`;
+        }} else if (packageRoots.size) {{
+            repoBadge.textContent =
+                `Packages: ${{[...packageRoots].sort().slice(0, 4).join(', ')}}`;
+        }} else {{
+            repoBadge.textContent = 'Repos: unknown';
+        }}
 
         edgeGroups.forEach((edge) => {{
             const raw = titleOf(edge);
@@ -796,8 +1069,17 @@ def _html_with_svg(svg: str, title: str) -> str:
             }}
         }});
 
+        svg.querySelectorAll('a').forEach((link) => {{
+            link.addEventListener('click', (event) => event.preventDefault());
+        }});
+
         const applyTransform = () => {{
-            viewport.style.transform = `translate(${{originX}}px, ${{originY}}px) scale(${{scale}})`;
+            viewport.style.transform =
+                `translate(${{originX}}px, ${{originY}}px) scale(${{scale}})`;
+            footer.textContent =
+                `Nodes: ${{nodeGroups.length}} · ` +
+                `Edges: ${{edgeGroups.length}} · ` +
+                `Zoom: ${{Math.round(scale * 100)}}%`;
         }};
 
         const fitToView = () => {{
@@ -816,7 +1098,9 @@ def _html_with_svg(svg: str, title: str) -> str:
             if (pinned && !force) return;
             nodeGroups.forEach((n) => n.classList.remove('dimmed', 'active'));
             edgeGroups.forEach((e) => e.classList.remove('dimmed', 'active'));
-            inspector.innerHTML = '<h4>Context</h4><div class="muted">Hover a module or dependency edge to see context.</div>';
+            inspector.innerHTML =
+                '<h4>Context</h4>' +
+                '<div class="muted">Click a node or edge to pin details.</div>';
         }};
 
         const markNodeActive = (name) => {{
@@ -852,9 +1136,15 @@ def _html_with_svg(svg: str, title: str) -> str:
                 }}
             }});
 
-            const outList = out.length ? `<ul>${{out.map((n) => `<li>${{esc(n)}}</li>`).join('')}}</ul>` : '<div class="muted">none</div>';
-            const inList = inc.length ? `<ul>${{inc.map((n) => `<li>${{esc(n)}}</li>`).join('')}}</ul>` : '<div class="muted">none</div>';
-            const pinBadge = isPinned ? '<div class="muted"><strong>Pinned</strong> · click empty space or press Esc to release</div>' : '';
+            const outList = out.length
+                ? `<ul>${{out.map((n) => `<li>${{esc(n)}}</li>`).join('')}}</ul>`
+                : '<div class="muted">none</div>';
+            const inList = inc.length
+                ? `<ul>${{inc.map((n) => `<li>${{esc(n)}}</li>`).join('')}}</ul>`
+                : '<div class="muted">none</div>';
+            const pinBadge = isPinned
+                ? '<div class="muted"><strong>Pinned</strong> · click empty space or press Esc to release</div>'
+                : '';
 
             inspector.innerHTML = `
                 <h4>${{esc(name)}}</h4>
@@ -886,7 +1176,9 @@ def _html_with_svg(svg: str, title: str) -> str:
                 }}
             }});
 
-            const pinBadge = isPinned ? '<div class="muted"><strong>Pinned</strong> · click empty space or press Esc to release</div>' : '';
+            const pinBadge = isPinned
+                ? '<div class="muted"><strong>Pinned</strong> · click empty space or press Esc to release</div>'
+                : '';
 
             inspector.innerHTML = `
                 <h4>Dependency</h4>
@@ -894,6 +1186,46 @@ def _html_with_svg(svg: str, title: str) -> str:
                 <div><strong>From:</strong> ${{esc(src)}}</div>
                 <div><strong>To:</strong> ${{esc(tgt)}}</div>
             `;
+        }};
+
+        const clearSearchStyles = () => {{
+            nodeGroups.forEach((n) => n.classList.remove('search-match'));
+        }};
+
+        const runSearch = (query) => {{
+            const q = query.trim().toLowerCase();
+            clearSearchStyles();
+            searchResults = [];
+            searchIndex = -1;
+            if (!q) {{
+                searchCount.textContent = '0 matches';
+                return;
+            }}
+
+            for (const node of nodeGroups) {{
+                const name = (node.dataset.name || '').toLowerCase();
+                const path = (node.dataset.path || '').toLowerCase();
+                if (name.includes(q) || path.includes(q)) {{
+                    node.classList.add('search-match');
+                    searchResults.push(node);
+                }}
+            }}
+
+            searchCount.textContent =
+                `${{searchResults.length}} match${{searchResults.length === 1 ? '' : 'es'}}`;
+            if (searchResults.length > 0) {{
+                searchIndex = 0;
+                const name = searchResults[0].dataset.name;
+                focusNode(name, false);
+            }}
+        }};
+
+        const stepSearch = () => {{
+            if (!searchResults.length) return;
+            searchIndex = (searchIndex + 1) % searchResults.length;
+            const node = searchResults[searchIndex];
+            const name = node.dataset.name;
+            focusNode(name, false);
         }};
 
         nodeGroups.forEach((node) => {{
@@ -904,6 +1236,7 @@ def _html_with_svg(svg: str, title: str) -> str:
             }});
             node.addEventListener('mouseleave', () => clearFocus());
             node.addEventListener('click', (event) => {{
+                event.preventDefault();
                 event.stopPropagation();
                 pinned = {{ kind: 'node', name }};
                 focusNode(name, true);
@@ -920,6 +1253,7 @@ def _html_with_svg(svg: str, title: str) -> str:
             }});
             edge.addEventListener('mouseleave', () => clearFocus());
             edge.addEventListener('click', (event) => {{
+                event.preventDefault();
                 event.stopPropagation();
                 pinned = {{ kind: 'edge', src, tgt }};
                 focusEdge(src, tgt, true);
@@ -933,15 +1267,42 @@ def _html_with_svg(svg: str, title: str) -> str:
         }});
 
         window.addEventListener('keydown', (event) => {{
-            if (event.key !== 'Escape') return;
-            pinned = null;
-            clearFocus(true);
+            if (event.key === 'Escape') {{
+                pinned = null;
+                clearFocus(true);
+                return;
+            }}
+            if (event.key === '/' && document.activeElement !== searchInput) {{
+                event.preventDefault();
+                searchInput.focus();
+                searchInput.select();
+                return;
+            }}
+            if (event.key === 'f' || event.key === 'F') {{
+                fitToView();
+                return;
+            }}
+            if (event.key === '+' || event.key === '=') {{
+                scale = Math.min(4, scale + 0.1);
+                applyTransform();
+                return;
+            }}
+            if (event.key === '-') {{
+                scale = Math.max(0.2, scale - 0.1);
+                applyTransform();
+                return;
+            }}
+            if (event.key === '0') {{
+                scale = 1;
+                applyTransform();
+                return;
+            }}
         }});
 
         canvas.addEventListener('wheel', (event) => {{
             event.preventDefault();
             const delta = Math.sign(event.deltaY) * -0.1;
-            scale = Math.min(3, Math.max(0.2, scale + delta));
+            scale = Math.min(4, Math.max(0.2, scale + delta));
             applyTransform();
         }});
 
@@ -960,6 +1321,32 @@ def _html_with_svg(svg: str, title: str) -> str:
 
         window.addEventListener('mouseup', () => {{
             isDragging = false;
+        }});
+
+        searchInput.addEventListener('input', () => runSearch(searchInput.value));
+        searchInput.addEventListener('keydown', (event) => {{
+            if (event.key === 'Enter') {{
+                event.preventDefault();
+                stepSearch();
+            }}
+        }});
+
+        document.getElementById('btn-fit').addEventListener('click', fitToView);
+        document.getElementById('btn-reset-zoom').addEventListener('click', () => {{
+            scale = 1;
+            applyTransform();
+        }});
+        document.getElementById('btn-zoom-in').addEventListener('click', () => {{
+            scale = Math.min(4, scale + 0.1);
+            applyTransform();
+        }});
+        document.getElementById('btn-zoom-out').addEventListener('click', () => {{
+            scale = Math.max(0.2, scale - 0.1);
+            applyTransform();
+        }});
+        document.getElementById('btn-clear-focus').addEventListener('click', () => {{
+            pinned = null;
+            clearFocus(true);
         }});
 
         window.addEventListener('resize', fitToView);

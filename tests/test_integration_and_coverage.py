@@ -360,9 +360,15 @@ def test_exporter_error_and_style_paths(monkeypatch: pytest.MonkeyPatch) -> None
     graph.add_module(Module(name="b", path="/tmp/src/sub/b.py"))
     graph.add_dependency(Dependency(source="a", target="b", line=1))
 
-    dot = export_dot(graph, edge_mode="cluster", cluster_depth=1, cluster_mode="module")
+    dot = export_dot(
+        graph,
+        edge_mode="cluster",
+        cluster_depth=1,
+        cluster_mode="module",
+        style="cruiser",
+    )
     assert "digraph" in dot
-    assert "digraph" in export_dot(graph, cluster_depth=0)
+    assert "digraph" in export_dot(graph, cluster_depth=0, style="cruiser")
 
     cluster_graph = DependencyGraph()
     cluster_graph.add_module(Module(name="pkg.a", path="/work/src/pkg/a.py"))
@@ -375,6 +381,7 @@ def test_exporter_error_and_style_paths(monkeypatch: pytest.MonkeyPatch) -> None
         edge_mode="cluster",
         cluster_depth=1,
         cluster_mode="module",
+        style="cruiser",
     )
     assert "ltail" in dot_cluster
     assert 'subgraph "cluster_' in dot_cluster
@@ -383,6 +390,7 @@ def test_exporter_error_and_style_paths(monkeypatch: pytest.MonkeyPatch) -> None
         graph,
         violations=[Violation("r", "warn", "m", "a", "b")],
         edge_mode="node",
+        style="cruiser",
     )
     assert "penwidth=2.2" in dot_cycle
 
@@ -391,7 +399,7 @@ def test_exporter_error_and_style_paths(monkeypatch: pytest.MonkeyPatch) -> None
     cycle_graph.add_module(Module(name="b", path="/x/b.py"))
     cycle_graph.add_dependency(Dependency(source="a", target="b", line=1))
     cycle_graph.add_dependency(Dependency(source="b", target="a", line=1))
-    dot_cycle_edge = export_dot(cycle_graph, edge_mode="node")
+    dot_cycle_edge = export_dot(cycle_graph, edge_mode="node", style="cruiser")
     assert "#C0392B" in dot_cycle_edge
 
     html_fallback = _html_with_fallback("digraph {}", "t", "err")
@@ -444,6 +452,7 @@ def test_exporter_error_and_style_paths(monkeypatch: pytest.MonkeyPatch) -> None
             edge_mode="cluster",
             cluster_depth=1,
             cluster_mode="module",
+            style="cruiser",
         )
         == "<svg/>"
     )
@@ -466,6 +475,7 @@ def test_exporter_error_and_style_paths(monkeypatch: pytest.MonkeyPatch) -> None
             edge_mode="cluster",
             cluster_depth=1,
             cluster_mode="module",
+            style="cruiser",
         )
 
     monkeypatch.setattr(
@@ -542,6 +552,7 @@ def test_exporter_error_and_style_paths(monkeypatch: pytest.MonkeyPatch) -> None
         "    ",
         "default",
         allowed={"a.c"},
+        style="default",
     )
     assert skipped_lines == [""]
 
