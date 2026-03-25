@@ -880,11 +880,6 @@ def _html_with_svg(svg: str, title: str) -> str:
         .toolbar button:hover {{
             background: #f9fafb;
         }}
-        .toolbar button.active {{
-            background: #e0edff;
-            border-color: #8ab4f8;
-            color: #1d4ed8;
-        }}
         .toolbar .badge {{
             font-size: 11px;
             color: #374151;
@@ -928,18 +923,13 @@ def _html_with_svg(svg: str, title: str) -> str:
         #inspector h4 {{
             margin: 2px 0 8px;
             font-size: 12px;
-            overflow-wrap: anywhere;
         }}
         #inspector .muted {{
             color: #6b7280;
-            overflow-wrap: anywhere;
         }}
         #inspector ul {{
             margin: 4px 0 8px 16px;
             padding: 0;
-        }}
-        #inspector li {{
-            overflow-wrap: anywhere;
         }}
         .footer {{
             height: var(--footer-h);
@@ -983,53 +973,6 @@ def _html_with_svg(svg: str, title: str) -> str:
         g.cluster > polygon {{
             fill: none !important;
         }}
-        g.module-layer {{
-            display: none;
-        }}
-        g.module-layer .module-edge {{
-            stroke: #1d4ed8;
-            opacity: 1;
-            fill: none;
-            pointer-events: none;
-            vector-effect: non-scaling-stroke;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-        }}
-        g.module-layer .module-edge.active {{
-            stroke: #1e40af;
-            opacity: 1;
-        }}
-        g.module-layer .module-block {{
-            fill: #eaf2ff;
-            stroke: #1d4ed8;
-            stroke-width: 1.8px;
-            rx: 8px;
-            ry: 8px;
-            cursor: pointer;
-        }}
-        g.module-layer g.active .module-block {{
-            stroke: #1e40af;
-            stroke-width: 2.2px;
-        }}
-        g.module-layer .module-label {{
-            fill: #0f172a;
-            font-size: 12px;
-            font-family: Helvetica, Arial, sans-serif;
-            pointer-events: none;
-        }}
-        body.module-view g.node,
-        body.module-view g.edge {{
-            display: none;
-        }}
-        body.module-view g.cluster {{
-            display: none;
-        }}
-        body.module-view g.graph > text {{
-            display: none;
-        }}
-        body.module-view g.module-layer {{
-            display: inline;
-        }}
     </style>
 </head>
 <body>
@@ -1039,7 +982,6 @@ def _html_with_svg(svg: str, title: str) -> str:
         <button id="btn-reset-zoom" title="Reset zoom to 100% (0)">100%</button>
         <button id="btn-zoom-in" title="Zoom in (+)">+</button>
         <button id="btn-zoom-out" title="Zoom out (-)">-</button>
-        <button id="btn-toggle-view" title="Toggle detail/module view (M)">Module view</button>
         <button id="btn-clear-focus" title="Clear current pin/focus (Esc)">Clear focus</button>
         <input id="search" type="search" placeholder="Search module/path… (/)">
         <span class="badge" id="search-count">0 matches</span>
@@ -1063,7 +1005,6 @@ def _html_with_svg(svg: str, title: str) -> str:
         const searchInput = document.getElementById('search');
         const searchCount = document.getElementById('search-count');
         const repoBadge = document.getElementById('repo-badge');
-        const viewToggleBtn = document.getElementById('btn-toggle-view');
         let scale = 1;
         let originX = 0;
         let originY = 0;
@@ -1071,7 +1012,6 @@ def _html_with_svg(svg: str, title: str) -> str:
         let startX = 0;
         let startY = 0;
         let pinned = null;
-        let activeView = 'detail';
         let searchResults = [];
         let searchIndex = -1;
 
@@ -1086,8 +1026,6 @@ def _html_with_svg(svg: str, title: str) -> str:
             group?.querySelector('title')?.textContent?.trim() || '';
         const nodeGroups = [...svg.querySelectorAll('g.node')];
         const edgeGroups = [...svg.querySelectorAll('g.edge')];
-        const clusterGroups = [...svg.querySelectorAll('g.cluster')];
-        const graphLabelTexts = [...svg.querySelectorAll('g.graph > text')];
         const nodeByName = new Map();
         const outgoing = new Map();
         const incoming = new Map();
@@ -1131,131 +1069,6 @@ def _html_with_svg(svg: str, title: str) -> str:
             }}
         }});
 
-        const moduleForNode = (node) => {{
-            const raw = (node.dataset.path || node.dataset.name || '').replaceAll('\\\\', '/');
-            if (!raw) return '';
-            const parts = raw.split('/').filter(Boolean);
-            const srcIdx = parts.indexOf('src');
-            if (srcIdx === -1) {{
-                const fallback = raw.split('.');
-                return fallback.slice(0, Math.max(1, fallback.length - 1)).join('.');
-            }}
-            const repo = srcIdx > 0 ? parts[srcIdx - 1] : 'repo';
-            let tail = parts.slice(srcIdx + 1);
-            if (!tail.length) return `${{repo}}/src`;
-            if (tail[tail.length - 1].includes('.')) {{
-                tail = tail.slice(0, -1);
-            }}
-            if (!tail.length) return `${{repo}}/src`;
-            const depth = Math.min(2, tail.length);
-            return `${{repo}}/src/${{tail.slice(0, depth).join('/')}}`;
-        }};
-
-        const moduleByNode = new Map();
-        const moduleMembers = new Map();
-        nodeGroups.forEach((node) => {{
-            const moduleName = moduleForNode(node);
-            moduleByNode.set(node.dataset.name, moduleName);
-            if (!moduleMembers.has(moduleName)) moduleMembers.set(moduleName, []);
-            moduleMembers.get(moduleName).push(node);
-        }});
-
-        const moduleOutgoing = new Map();
-        const moduleIncoming = new Map();
-        const moduleEdgeWeights = new Map();
-        edgeGroups.forEach((edge) => {{
-            const srcModule = moduleByNode.get(edge.dataset.src || '');
-            const tgtModule = moduleByNode.get(edge.dataset.tgt || '');
-            if (!srcModule || !tgtModule || srcModule === tgtModule) return;
-            if (!moduleOutgoing.has(srcModule)) moduleOutgoing.set(srcModule, new Set());
-            if (!moduleIncoming.has(tgtModule)) moduleIncoming.set(tgtModule, new Set());
-            moduleOutgoing.get(srcModule).add(tgtModule);
-            moduleIncoming.get(tgtModule).add(srcModule);
-            const key = `${{srcModule}}=>${{tgtModule}}`;
-            moduleEdgeWeights.set(key, (moduleEdgeWeights.get(key) || 0) + 1);
-        }});
-
-        const graphLayer = svg.querySelector('g.graph') || svg;
-        const graphChildren = [...graphLayer.children];
-        const moduleLayer = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        moduleLayer.classList.add('module-layer');
-        graphLayer.appendChild(moduleLayer);
-
-        const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-        const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
-        arrow.setAttribute('id', 'module-arrow');
-        arrow.setAttribute('markerWidth', '13');
-        arrow.setAttribute('markerHeight', '9');
-        arrow.setAttribute('refX', '11');
-        arrow.setAttribute('refY', '4.5');
-        arrow.setAttribute('orient', 'auto');
-        arrow.setAttribute('markerUnits', 'strokeWidth');
-        const arrowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        arrowPath.setAttribute('d', 'M0,0 L13,4.5 L0,9 Z');
-        arrowPath.setAttribute('fill', '#1d4ed8');
-        arrow.appendChild(arrowPath);
-        defs.appendChild(arrow);
-        moduleLayer.appendChild(defs);
-
-        const moduleCenters = new Map();
-        moduleMembers.forEach((members, moduleName) => {{
-            if (!moduleName || !members.length) return;
-            const boxes = members.map((node) => node.getBBox());
-            const cx = boxes.reduce((acc, box) => acc + box.x + box.width / 2, 0) / boxes.length;
-            const cy = boxes.reduce((acc, box) => acc + box.y + box.height / 2, 0) / boxes.length;
-            moduleCenters.set(moduleName, {{ x: cx, y: cy }});
-        }});
-
-        const moduleBlocks = new Map();
-        const moduleEdges = [];
-
-        moduleEdgeWeights.forEach((weight, key) => {{
-            const [source, target] = key.split('=>');
-            const src = moduleCenters.get(source);
-            const tgt = moduleCenters.get(target);
-            if (!src || !tgt) return;
-            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.classList.add('module-edge');
-            line.dataset.src = source;
-            line.dataset.tgt = target;
-            line.dataset.weight = String(weight);
-            line.setAttribute('x1', String(src.x));
-            line.setAttribute('y1', String(src.y));
-            line.setAttribute('x2', String(tgt.x));
-            line.setAttribute('y2', String(tgt.y));
-            line.setAttribute('stroke-width', String(Math.min(6, 1.8 + weight * 0.12)));
-            line.setAttribute('marker-end', 'url(#module-arrow)');
-            moduleLayer.appendChild(line);
-            moduleEdges.push(line);
-        }});
-
-        moduleCenters.forEach((center, moduleName) => {{
-            const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-            group.dataset.module = moduleName;
-            const width = Math.max(140, Math.min(420, moduleName.length * 7.4 + 32));
-            const height = 34;
-            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-            rect.classList.add('module-block');
-            rect.setAttribute('x', String(center.x - width / 2));
-            rect.setAttribute('y', String(center.y - height / 2));
-            rect.setAttribute('width', String(width));
-            rect.setAttribute('height', String(height));
-            group.appendChild(rect);
-            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.classList.add('module-label');
-            text.setAttribute('x', String(center.x - width / 2 + 8));
-            text.setAttribute('y', String(center.y + 5));
-            const maxLabelChars = Math.max(10, Math.floor((width - 16) / 6.2));
-            const shortLabel = moduleName.length > maxLabelChars
-                ? `${{moduleName.slice(0, maxLabelChars - 1)}}…`
-                : moduleName;
-            text.textContent = shortLabel;
-            text.setAttribute('title', moduleName);
-            group.appendChild(text);
-            moduleLayer.appendChild(group);
-            moduleBlocks.set(moduleName, group);
-        }});
-
         svg.querySelectorAll('a').forEach((link) => {{
             link.addEventListener('click', (event) => event.preventDefault());
         }});
@@ -1263,13 +1076,6 @@ def _html_with_svg(svg: str, title: str) -> str:
         const applyTransform = () => {{
             viewport.style.transform =
                 `translate(${{originX}}px, ${{originY}}px) scale(${{scale}})`;
-            if (activeView === 'module') {{
-                footer.textContent =
-                    `Modules: ${{moduleBlocks.size}} · ` +
-                    `Edges: ${{moduleEdges.length}} · ` +
-                    `Zoom: ${{Math.round(scale * 100)}}%`;
-                return;
-            }}
             footer.textContent =
                 `Nodes: ${{nodeGroups.length}} · ` +
                 `Edges: ${{edgeGroups.length}} · ` +
@@ -1292,14 +1098,6 @@ def _html_with_svg(svg: str, title: str) -> str:
             if (pinned && !force) return;
             nodeGroups.forEach((n) => n.classList.remove('dimmed', 'active'));
             edgeGroups.forEach((e) => e.classList.remove('dimmed', 'active'));
-            moduleBlocks.forEach((g) => g.classList.remove('dimmed', 'active'));
-            moduleEdges.forEach((e) => e.classList.remove('dimmed', 'active'));
-            if (activeView === 'module') {{
-                inspector.innerHTML =
-                    '<h4>Module view</h4>' +
-                    '<div class="muted">Select a module block to inspect incoming/outgoing module dependencies.</div>';
-                return;
-            }}
             inspector.innerHTML =
                 '<h4>Context</h4>' +
                 '<div class="muted">Click a node or edge to pin details.</div>';
@@ -1390,107 +1188,11 @@ def _html_with_svg(svg: str, title: str) -> str:
             `;
         }};
 
-        const focusModule = (moduleName, isPinned = false) => {{
-            const out = [...(moduleOutgoing.get(moduleName) || [])].sort();
-            const inc = [...(moduleIncoming.get(moduleName) || [])].sort();
-            moduleBlocks.forEach((group, name) => {{
-                const active = name === moduleName;
-                group.classList.toggle('dimmed', !active);
-                group.classList.toggle('active', active);
-            }});
-            moduleEdges.forEach((edge) => {{
-                const src = edge.dataset.src;
-                const tgt = edge.dataset.tgt;
-                const active = src === moduleName || tgt === moduleName;
-                edge.classList.toggle('dimmed', !active);
-                edge.classList.toggle('active', active);
-            }});
-            const outList = out.length
-                ? `<ul>${{out.map((name) => `<li>${{esc(name)}}</li>`).join('')}}</ul>`
-                : '<div class="muted">none</div>';
-            const inList = inc.length
-                ? `<ul>${{inc.map((name) => `<li>${{esc(name)}}</li>`).join('')}}</ul>`
-                : '<div class="muted">none</div>';
-            const pinBadge = isPinned
-                ? '<div class="muted"><strong>Pinned</strong> · click empty space or press Esc to release</div>'
-                : '';
-            inspector.innerHTML = `
-                <h4>${{esc(moduleName)}}</h4>
-                ${{pinBadge}}
-                <div><strong>Outgoing modules</strong> (${{out.length}})</div>
-                ${{outList}}
-                <div><strong>Incoming modules</strong> (${{inc.length}})</div>
-                ${{inList}}
-            `;
-        }};
-
-        const setView = (nextView) => {{
-            activeView = nextView;
-            const moduleMode = activeView === 'module';
-            document.body.classList.toggle('module-view', moduleMode);
-            viewToggleBtn.textContent =
-                moduleMode ? 'Detail view' : 'Module view';
-            viewToggleBtn.classList.toggle('active', moduleMode);
-            if (moduleMode) {{
-                graphChildren.forEach((child) => {{
-                    if (child === moduleLayer) return;
-                    child.style.display = 'none';
-                }});
-                nodeGroups.forEach((node) => {{
-                    node.style.display = 'none';
-                }});
-                edgeGroups.forEach((edge) => {{
-                    edge.style.display = 'none';
-                }});
-                clusterGroups.forEach((cluster) => {{
-                    cluster.style.display = 'none';
-                }});
-                graphLabelTexts.forEach((label) => {{
-                    label.style.display = 'none';
-                }});
-                moduleLayer.style.display = 'inline';
-            }} else {{
-                graphChildren.forEach((child) => {{
-                    child.style.display = '';
-                }});
-                nodeGroups.forEach((node) => {{
-                    node.style.display = '';
-                }});
-                edgeGroups.forEach((edge) => {{
-                    edge.style.display = '';
-                }});
-                clusterGroups.forEach((cluster) => {{
-                    cluster.style.display = '';
-                }});
-                graphLabelTexts.forEach((label) => {{
-                    label.style.display = '';
-                }});
-                moduleLayer.style.display = 'none';
-            }}
-            pinned = null;
-            searchResults = [];
-            searchIndex = -1;
-            clearSearchStyles();
-            if (moduleMode) {{
-                searchInput.value = '';
-                searchCount.textContent = 'module mode';
-            }} else {{
-                searchCount.textContent = '0 matches';
-            }}
-            clearFocus(true);
-            fitToView();
-            applyTransform();
-        }};
-
         const clearSearchStyles = () => {{
             nodeGroups.forEach((n) => n.classList.remove('search-match'));
         }};
 
         const runSearch = (query) => {{
-            if (activeView === 'module') {{
-                searchCount.textContent = 'module mode';
-                return;
-            }}
             const q = query.trim().toLowerCase();
             clearSearchStyles();
             searchResults = [];
@@ -1519,7 +1221,6 @@ def _html_with_svg(svg: str, title: str) -> str:
         }};
 
         const stepSearch = () => {{
-            if (activeView === 'module') return;
             if (!searchResults.length) return;
             searchIndex = (searchIndex + 1) % searchResults.length;
             const node = searchResults[searchIndex];
@@ -1530,18 +1231,13 @@ def _html_with_svg(svg: str, title: str) -> str:
         nodeGroups.forEach((node) => {{
             const name = node.dataset.name;
             node.addEventListener('mouseenter', () => {{
-                if (activeView === 'module') return;
                 if (pinned) return;
                 focusNode(name);
             }});
-            node.addEventListener('mouseleave', () => {{
-                if (activeView === 'module') return;
-                clearFocus();
-            }});
+            node.addEventListener('mouseleave', () => clearFocus());
             node.addEventListener('click', (event) => {{
                 event.preventDefault();
                 event.stopPropagation();
-                if (activeView === 'module') return;
                 pinned = {{ kind: 'node', name }};
                 focusNode(name, true);
             }});
@@ -1552,35 +1248,19 @@ def _html_with_svg(svg: str, title: str) -> str:
             const tgt = edge.dataset.tgt;
             if (!src || !tgt) return;
             edge.addEventListener('mouseenter', () => {{
-                if (activeView === 'module') return;
                 if (pinned) return;
                 focusEdge(src, tgt);
             }});
-            edge.addEventListener('mouseleave', () => {{
-                if (activeView === 'module') return;
-                clearFocus();
-            }});
+            edge.addEventListener('mouseleave', () => clearFocus());
             edge.addEventListener('click', (event) => {{
                 event.preventDefault();
                 event.stopPropagation();
-                if (activeView === 'module') return;
                 pinned = {{ kind: 'edge', src, tgt }};
                 focusEdge(src, tgt, true);
             }});
         }});
 
-        moduleBlocks.forEach((group, moduleName) => {{
-            group.addEventListener('click', (event) => {{
-                event.preventDefault();
-                event.stopPropagation();
-                if (activeView !== 'module') return;
-                pinned = {{ kind: 'module', moduleName }};
-                focusModule(moduleName, true);
-            }});
-        }});
-
         canvas.addEventListener('click', (event) => {{
-            if (activeView === 'module' && event.target.closest('g.module-layer')) return;
             if (event.target.closest('g.node') || event.target.closest('g.edge')) return;
             pinned = null;
             clearFocus(true);
@@ -1617,11 +1297,6 @@ def _html_with_svg(svg: str, title: str) -> str:
                 applyTransform();
                 return;
             }}
-            if (event.key === 'm' || event.key === 'M') {{
-                const next = activeView === 'detail' ? 'module' : 'detail';
-                setView(next);
-                return;
-            }}
         }});
 
         canvas.addEventListener('wheel', (event) => {{
@@ -1650,12 +1325,6 @@ def _html_with_svg(svg: str, title: str) -> str:
 
         searchInput.addEventListener('input', () => runSearch(searchInput.value));
         searchInput.addEventListener('keydown', (event) => {{
-            if (event.key === 'm' || event.key === 'M') {{
-                event.preventDefault();
-                const next = activeView === 'detail' ? 'module' : 'detail';
-                setView(next);
-                return;
-            }}
             if (event.key === 'Enter') {{
                 event.preventDefault();
                 stepSearch();
@@ -1678,10 +1347,6 @@ def _html_with_svg(svg: str, title: str) -> str:
         document.getElementById('btn-clear-focus').addEventListener('click', () => {{
             pinned = null;
             clearFocus(true);
-        }});
-        viewToggleBtn.addEventListener('click', () => {{
-            const next = activeView === 'detail' ? 'module' : 'detail';
-            setView(next);
         }});
 
         window.addEventListener('resize', fitToView);

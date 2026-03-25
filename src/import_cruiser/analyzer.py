@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import os
+import warnings
 from pathlib import Path
 
 from import_cruiser.graph import Dependency, DependencyGraph, Module
@@ -27,7 +28,11 @@ def _module_name_from_path(
 def _collect_imports(source: str, module_name: str) -> list[tuple[str, int]]:
     """Return list of (import_name, line_no) extracted from *source*."""
     try:
-        tree = ast.parse(source)
+        # Some real-world files trigger SyntaxWarning (e.g. invalid escape
+        # sequences in strings); keep CLI output quiet by default.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", SyntaxWarning)
+            tree = ast.parse(source)
     except SyntaxError:
         return []
 

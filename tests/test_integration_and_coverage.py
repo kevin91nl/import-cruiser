@@ -4,6 +4,7 @@ import os
 import runpy
 import subprocess
 import sys
+import warnings
 from pathlib import Path
 
 import pytest
@@ -276,6 +277,14 @@ def test_collect_imports_fallback_parser_branches(
     assert _collect_imports("from pkg import name\n", "pkg.mod") == []
     assert _collect_imports("from .. import name\n", "pkg.mod") == []
     assert _collect_imports("from ..name import thing\n", "pkg") == [("name", 1)]
+
+
+def test_collect_imports_suppresses_syntax_warning() -> None:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", SyntaxWarning)
+        imports = _collect_imports("x = 1\n", "pkg.mod")
+    assert imports == []
+    assert not any(item.category is SyntaxWarning for item in caught)
 
 
 def test_graph_edge_cases(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
