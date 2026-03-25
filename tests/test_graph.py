@@ -98,6 +98,13 @@ class TestGraphFiltering:
         filtered = filter_graph(g, include_paths=[r"src/"])
         assert {m.name for m in filtered.modules} == {"a"}
 
+    def test_include_path_matches_absolute_pattern(self) -> None:
+        g = DependencyGraph()
+        g.add_module(Module(name="a", path="/private/tmp/repo/src/a.py"))
+        g.add_module(Module(name="b", path="/private/tmp/repo/tests/b.py"))
+        filtered = filter_graph(g, include_paths=[r"/private/tmp/repo/src/"])
+        assert {m.name for m in filtered.modules} == {"a"}
+
 
 class TestGraphCollapse:
     def test_collapse_depth(self) -> None:
