@@ -1,45 +1,24 @@
-digraph "import_cruiser" {
-    graph [rankdir=TB, splines=curved, overlap=false, ranksep=1.05, nodesep=0.55, pack=true, packmode="clust", newrank=true, compound=true, ratio="compress", fontname="Helvetica", fontsize=10, bgcolor="white", pad=0.45, margin=0.45];
-    node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, color="#2F2F2F", fillcolor="#DFF3F8"];
-    edge [color="#B0B0B0", arrowsize=0.7];
+strict digraph "import_cruiser"{
+    rankdir="LR" splines="true" overlap="false" nodesep="0.16" ranksep="0.18" fontname="Helvetica-bold" fontsize="9" style="rounded,bold,filled" fillcolor="#ffffff" compound="true"
+    node [shape="box" style="rounded, filled" height="0.2" color="black" fillcolor="#ffffcc" fontcolor="black" fontname="Helvetica" fontsize="9"]
+    edge [arrowhead="normal" arrowsize="0.6" penwidth="2.0" color="#00000033" fontname="Helvetica" fontsize="9"]
 
-    subgraph "cluster_src" {
-        label="src";
-        class="cluster_key_src";
-        margin=26;
-        color="black";
-        penwidth=1.0;
-        style="rounded,bold";
-        fontname="Helvetica";
-        fontsize=9;
-        "__cluster_anchor_src" [label="", shape=point, width=0, height=0, style=invis];
-        subgraph "cluster_src_import_cruiser" {
-            label="import_cruiser";
-            class="cluster_key_src_import_cruiser";
-            margin=26;
-            color="black";
-            penwidth=1.0;
-            style="rounded,bold";
-            fontname="Helvetica";
-            fontsize=9;
-            "import_cruiser.analyzer" [label="analyzer.py", tooltip="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/analyzer.py", class="node_cluster_src_import_cruiser"];
-            "import_cruiser.cli" [label="cli.py", tooltip="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/cli.py", class="node_cluster_src_import_cruiser"];
-            "import_cruiser.config" [label="config.py", tooltip="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/config.py", class="node_cluster_src_import_cruiser"];
-            "import_cruiser.detector" [label="detector.py", tooltip="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/detector.py", class="node_cluster_src_import_cruiser"];
-            "import_cruiser.exporter" [label="exporter.py", tooltip="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/exporter.py", class="node_cluster_src_import_cruiser"];
-            "import_cruiser.graph" [label="graph.py", tooltip="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/graph.py", class="node_cluster_src_import_cruiser"];
-            "import_cruiser.validator" [label="validator.py", tooltip="/Users/kevin/.codex/worktrees/ae68/pydepend/src/import_cruiser/validator.py", class="node_cluster_src_import_cruiser"];
-        }
-    }
+    subgraph "cluster_src" {label="src" subgraph "cluster_src/import_cruiser" {label="import_cruiser" "src/import_cruiser/analyzer.py" [label=<analyzer.py> tooltip="analyzer.py" URL="src/import_cruiser/analyzer.py" ] }}
+    subgraph "cluster_src" {label="src" subgraph "cluster_src/import_cruiser" {label="import_cruiser" "src/import_cruiser/cli.py" [label=<cli.py> tooltip="cli.py" URL="src/import_cruiser/cli.py" ] }}
+    subgraph "cluster_src" {label="src" subgraph "cluster_src/import_cruiser" {label="import_cruiser" "src/import_cruiser/config.py" [label=<config.py> tooltip="config.py" URL="src/import_cruiser/config.py" ] }}
+    subgraph "cluster_src" {label="src" subgraph "cluster_src/import_cruiser" {label="import_cruiser" "src/import_cruiser/detector.py" [label=<detector.py> tooltip="detector.py" URL="src/import_cruiser/detector.py" ] }}
+    subgraph "cluster_src" {label="src" subgraph "cluster_src/import_cruiser" {label="import_cruiser" "src/import_cruiser/exporter.py" [label=<exporter.py> tooltip="exporter.py" URL="src/import_cruiser/exporter.py" ] }}
+    subgraph "cluster_src" {label="src" subgraph "cluster_src/import_cruiser" {label="import_cruiser" "src/import_cruiser/graph.py" [label=<graph.py> tooltip="graph.py" URL="src/import_cruiser/graph.py" ] }}
+    subgraph "cluster_src" {label="src" subgraph "cluster_src/import_cruiser" {label="import_cruiser" "src/import_cruiser/validator.py" [label=<validator.py> tooltip="validator.py" URL="src/import_cruiser/validator.py" ] }}
 
-    "import_cruiser.analyzer" -> "import_cruiser.graph";
-    "import_cruiser.cli" -> "import_cruiser.analyzer";
-    "import_cruiser.cli" -> "import_cruiser.config";
-    "import_cruiser.cli" -> "import_cruiser.exporter";
-    "import_cruiser.cli" -> "import_cruiser.graph";
-    "import_cruiser.cli" -> "import_cruiser.validator";
-    "import_cruiser.detector" -> "import_cruiser.graph";
-    "import_cruiser.exporter" -> "import_cruiser.graph";
-    "import_cruiser.validator" -> "import_cruiser.config";
-    "import_cruiser.validator" -> "import_cruiser.graph";
+    "src/import_cruiser/analyzer.py" -> "src/import_cruiser/graph.py"
+    "src/import_cruiser/cli.py" -> "src/import_cruiser/analyzer.py"
+    "src/import_cruiser/cli.py" -> "src/import_cruiser/config.py"
+    "src/import_cruiser/cli.py" -> "src/import_cruiser/exporter.py"
+    "src/import_cruiser/cli.py" -> "src/import_cruiser/graph.py"
+    "src/import_cruiser/cli.py" -> "src/import_cruiser/validator.py"
+    "src/import_cruiser/detector.py" -> "src/import_cruiser/graph.py"
+    "src/import_cruiser/exporter.py" -> "src/import_cruiser/graph.py"
+    "src/import_cruiser/validator.py" -> "src/import_cruiser/config.py"
+    "src/import_cruiser/validator.py" -> "src/import_cruiser/graph.py"
 }

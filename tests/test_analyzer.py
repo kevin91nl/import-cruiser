@@ -6,7 +6,11 @@ import textwrap
 from pathlib import Path
 
 
-from import_cruiser.analyzer import Analyzer, _collect_imports, _module_name_from_path
+from import_cruiser.analyzer import (
+    Analyzer,
+    _collect_imports,
+    _module_name_from_path,
+)
 
 
 class TestModuleNameFromPath:
@@ -86,7 +90,8 @@ class TestAnalyzer:
             },
         )
         graph = Analyzer(tmp_path).analyze()
-        # os and sys are external – should not appear in modules or dependencies
+        # os and sys are external.
+        # They should not appear in modules or dependencies.
         mod_names = {m.name for m in graph.modules}
         assert "os" not in mod_names
         assert len(graph.dependencies) == 0
@@ -132,6 +137,32 @@ class TestAnalyzer:
         mod_names = {m.name for m in graph.modules}
         assert "real" in mod_names
         assert "cached" not in mod_names
+
+    def test_include_path_prefilters_file_walk(self, tmp_path: Path) -> None:
+        self._make_project(
+            tmp_path,
+            {
+                "pkg/keep.py": "x = 1\n",
+                "pkg/skip.py": "x = 2\n",
+            },
+        )
+        graph = Analyzer(tmp_path, include_paths=[r"keep\.py$"]).analyze()
+        mod_names = {m.name for m in graph.modules}
+        assert "pkg.keep" in mod_names
+        assert "pkg.skip" not in mod_names
+
+    def test_exclude_path_prefilters_file_walk(self, tmp_path: Path) -> None:
+        self._make_project(
+            tmp_path,
+            {
+                "pkg/keep.py": "x = 1\n",
+                "pkg/skip.py": "x = 2\n",
+            },
+        )
+        graph = Analyzer(tmp_path, exclude_paths=[r"skip\.py$"]).analyze()
+        mod_names = {m.name for m in graph.modules}
+        assert "pkg.keep" in mod_names
+        assert "pkg.skip" not in mod_names
 
 
 def test_source_root_detection(tmp_path: Path) -> None:

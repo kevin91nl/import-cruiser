@@ -166,8 +166,10 @@ def filter_graph(
         allowed = {
             name
             for name in allowed
-            if _matches_any(
-                _match_path(module_map[name].path, root_path), include_path_patterns
+            if _matches_path_filters(
+                module_map[name].path,
+                root_path,
+                include_path_patterns,
             )
         }
 
@@ -175,8 +177,10 @@ def filter_graph(
         allowed = {
             name
             for name in allowed
-            if not _matches_any(
-                _match_path(module_map[name].path, root_path), exclude_path_patterns
+            if not _matches_path_filters(
+                module_map[name].path,
+                root_path,
+                exclude_path_patterns,
             )
         }
 
@@ -206,6 +210,22 @@ def collapse_graph(graph: DependencyGraph, depth: int) -> DependencyGraph:
             collapsed.add_dependency(Dependency(source=src, target=tgt, line=dep.line))
 
     return collapsed
+
+
+def prune_orphan_init_modules(graph: DependencyGraph) -> DependencyGraph:
+    """Remove modules backed by ``__init__.py`` files that have no edges."""
+    module_map = {m.name: m for m in graph.modules}
+    connected: set[str] = set()
+    for dep in graph.dependencies:
+        connected.add(dep.source)
+        connected.add(dep.target)
+
+    allowed = {
+        name
+        for name, module in module_map.items()
+        if Path(module.path).name != "__init__.py" or name in connected
+    }
+    return _subgraph(graph, module_map, allowed)
 
 
 def aggregate_by_path(
@@ -270,6 +290,16 @@ def _compile_patterns(patterns: list[str] | None) -> list[re.Pattern[str]]:
 
 def _matches_any(value: str, patterns: list[re.Pattern[str]]) -> bool:
     return any(p.search(value) for p in patterns)
+
+
+def _matches_path_filters(
+    path: str,
+    root_path: str | None,
+    patterns: list[re.Pattern[str]],
+) -> bool:
+    rel_path = _match_path(path, root_path)
+    abs_path = path.replace("\\", "/")
+    return _matches_any(rel_path, patterns) or _matches_any(abs_path, patterns)
 
 
 def _expand_focus(

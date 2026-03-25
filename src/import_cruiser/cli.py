@@ -26,8 +26,18 @@ from import_cruiser.graph import (
     collapse_graph,
     detect_cycles,
     filter_graph,
+    prune_orphan_init_modules,
 )
 from import_cruiser.validator import Validator, Violation
+
+DEFAULT_NOISE_PATH_PATTERNS: tuple[str, ...] = (
+    r"__init__\.py$",
+    r"/\.venv/",
+    r"/site-packages/",
+    r"/tests/",
+    r"/scripts/",
+    r"/migrations/",
+)
 
 
 @click.group()
@@ -68,16 +78,17 @@ def main() -> None:
 @click.option(
     "--layout",
     type=click.Choice(["dot", "sfdp", "neato", "fdp"], case_sensitive=False),
-    default="neato",
+    default="dot",
     show_default=True,
     help="Graphviz layout engine for svg/html output.",
 )
 @click.option(
     "--style",
     type=click.Choice(
-        ["default", "archi", "cruiser", "navigator"], case_sensitive=False
+        ["default", "archi", "cruiser", "navigator", "depcruise"],
+        case_sensitive=False,
     ),
-    default="cruiser",
+    default="depcruise",
     show_default=True,
     help="Graph styling preset.",
 )
@@ -109,6 +120,15 @@ def main() -> None:
     help="Regex to exclude file paths (repeatable).",
 )
 @click.option(
+    "--exclude-common-noise-paths/--no-exclude-common-noise-paths",
+    default=False,
+    show_default=True,
+    help=(
+        "Exclude common noise paths "
+        "(tests/scripts/migrations) from graph generation."
+    ),
+)
+@click.option(
     "--focus",
     multiple=True,
     help="Regex to focus on module names and neighbors (repeatable).",
@@ -130,7 +150,7 @@ def main() -> None:
 @click.option(
     "--cluster-depth",
     type=int,
-    default=3,
+    default=5,
     show_default=True,
     help="Cluster modules by package depth (0 disables).",
 )
@@ -144,7 +164,7 @@ def main() -> None:
 @click.option(
     "--aggregate-depth",
     type=int,
-    default=20,
+    default=8,
     show_default=True,
     help="Aggregate modules by path depth (0 disables).",
 )
@@ -172,6 +192,7 @@ def cmd_analyze(
     exclude: tuple[str, ...],
     include_path: tuple[str, ...],
     exclude_path: tuple[str, ...],
+    exclude_common_noise_paths: bool,
     focus: tuple[str, ...],
     focus_depth: int,
     collapse_depth: int,
@@ -185,14 +206,23 @@ def cmd_analyze(
 
     PATH defaults to the current working directory.
     """
-    graph = Analyzer(path, normalize_hyphens=normalize_hyphens).analyze()
+    effective_exclude_paths = _effective_exclude_paths(
+        exclude_path,
+        exclude_common_noise_paths,
+    )
+    graph = Analyzer(
+        path,
+        normalize_hyphens=normalize_hyphens,
+        include_paths=list(include_path),
+        exclude_paths=effective_exclude_paths,
+    ).analyze()
     graph, layout, rankdir, cluster_depth, cluster_mode, style, edge_mode = (
         _apply_graph_options(
             graph,
             include=list(include),
             exclude=list(exclude),
             include_paths=list(include_path),
-            exclude_paths=list(exclude_path),
+            exclude_paths=effective_exclude_paths,
             focus=list(focus),
             focus_depth=focus_depth,
             collapse_depth=collapse_depth,
@@ -351,16 +381,17 @@ def cmd_validate(
 @click.option(
     "--layout",
     type=click.Choice(["dot", "sfdp", "neato", "fdp"], case_sensitive=False),
-    default="neato",
+    default="dot",
     show_default=True,
     help="Graphviz layout engine for svg/html output.",
 )
 @click.option(
     "--style",
     type=click.Choice(
-        ["default", "archi", "cruiser", "navigator"], case_sensitive=False
+        ["default", "archi", "cruiser", "navigator", "depcruise"],
+        case_sensitive=False,
     ),
-    default="cruiser",
+    default="depcruise",
     show_default=True,
     help="Graph styling preset.",
 )
@@ -392,6 +423,15 @@ def cmd_validate(
     help="Regex to exclude file paths (repeatable).",
 )
 @click.option(
+    "--exclude-common-noise-paths/--no-exclude-common-noise-paths",
+    default=False,
+    show_default=True,
+    help=(
+        "Exclude common noise paths "
+        "(tests/scripts/migrations) from graph generation."
+    ),
+)
+@click.option(
     "--focus",
     multiple=True,
     help="Regex to focus on module names and neighbors (repeatable).",
@@ -413,7 +453,7 @@ def cmd_validate(
 @click.option(
     "--cluster-depth",
     type=int,
-    default=3,
+    default=5,
     show_default=True,
     help="Cluster modules by package depth (0 disables).",
 )
@@ -427,7 +467,7 @@ def cmd_validate(
 @click.option(
     "--aggregate-depth",
     type=int,
-    default=20,
+    default=8,
     show_default=True,
     help="Aggregate modules by path depth (0 disables).",
 )
@@ -462,6 +502,7 @@ def cmd_export(
     exclude: tuple[str, ...],
     include_path: tuple[str, ...],
     exclude_path: tuple[str, ...],
+    exclude_common_noise_paths: bool,
     focus: tuple[str, ...],
     focus_depth: int,
     collapse_depth: int,
@@ -477,14 +518,23 @@ def cmd_export(
     PATH defaults to the current working directory.  Use ``analyze --format dot``
     for quick one-step output; this command is for explicit graph exports.
     """
-    graph = Analyzer(path, normalize_hyphens=normalize_hyphens).analyze()
+    effective_exclude_paths = _effective_exclude_paths(
+        exclude_path,
+        exclude_common_noise_paths,
+    )
+    graph = Analyzer(
+        path,
+        normalize_hyphens=normalize_hyphens,
+        include_paths=list(include_path),
+        exclude_paths=effective_exclude_paths,
+    ).analyze()
     graph, layout, rankdir, cluster_depth, cluster_mode, style, edge_mode = (
         _apply_graph_options(
             graph,
             include=list(include),
             exclude=list(exclude),
             include_paths=list(include_path),
-            exclude_paths=list(exclude_path),
+            exclude_paths=effective_exclude_paths,
             focus=list(focus),
             focus_depth=focus_depth,
             collapse_depth=collapse_depth,
@@ -547,6 +597,19 @@ def _write_output(content: str, output: Optional[str]) -> None:
         click.echo(f"Output written to {output}", err=True)
     else:
         click.echo(content)
+
+
+def _effective_exclude_paths(
+    exclude_path: tuple[str, ...],
+    exclude_common_noise_paths: bool,
+) -> list[str]:
+    effective = list(exclude_path)
+    if not exclude_common_noise_paths:
+        return effective
+    for pattern in DEFAULT_NOISE_PATH_PATTERNS:
+        if pattern not in effective:
+            effective.append(pattern)
+    return effective
 
 
 def _apply_graph_options(
@@ -629,7 +692,8 @@ def _apply_graph_options(
         edge_mode = "node"
 
     collapsed = collapse_graph(filtered, collapse_depth)
-    return collapsed, layout, rankdir, cluster_depth, cluster_mode, style, edge_mode
+    pruned = prune_orphan_init_modules(collapsed)
+    return pruned, layout, rankdir, cluster_depth, cluster_mode, style, edge_mode
 
 
 def _drop_dangling_init_modules(graph: DependencyGraph) -> DependencyGraph:
@@ -666,7 +730,7 @@ def _export_svg(
     rankdir: str = "LR",
     cluster_depth: int = 3,
     cluster_mode: str = "path",
-    style: str = "default",
+    style: str = "depcruise",
     edge_mode: str = "node",
 ) -> str:
     if violations is None:

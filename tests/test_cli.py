@@ -67,6 +67,30 @@ class TestAnalyzeCommand:
         data = json.loads(result.output)
         assert data["summary"]["cycles"] >= 1
 
+    def test_analyze_exclude_common_noise_paths(self, tmp_path: Path) -> None:
+        src_pkg = tmp_path / "src" / "mypkg"
+        tests_pkg = tmp_path / "tests"
+        src_pkg.mkdir(parents=True)
+        tests_pkg.mkdir(parents=True)
+        (src_pkg / "__init__.py").write_text("")
+        (src_pkg / "core.py").write_text("x = 1\n")
+        (tests_pkg / "test_core.py").write_text("import mypkg.core\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "analyze",
+                str(tmp_path),
+                "--exclude-common-noise-paths",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        module_names = {module["name"] for module in data["modules"]}
+        assert "mypkg.core" in module_names
+        assert "tests.test_core" not in module_names
+
 
 class TestValidateCommand:
     def test_no_config(self, sample_project: Path) -> None:
@@ -304,7 +328,7 @@ class TestExportCommand:
         assert "ltail=" not in result.output
         assert "lhead=" not in result.output
 
-    def test_export_default_style_is_cruiser_with_deeper_clusters(
+    def test_export_default_style_is_depcruise_with_deeper_clusters(
         self, tmp_path: Path
     ) -> None:
         pkg = tmp_path / "src" / "mypkg" / "modules" / "company_events"
@@ -343,8 +367,11 @@ class TestExportCommand:
             ],
         )
         assert result.exit_code == 0, result.output
-        assert "rankdir=TB" in result.output
-        assert "cluster_src_mypkg_modules_company_events" in result.output
+        assert 'rankdir="LR"' in result.output
+        assert (
+            '"src/mypkg/modules/company_events/api.py" -> "src/mypkg/modules/company_events/model.py"'
+            in result.output
+        )
 
     def test_export_default_style_auto_fallback_for_default_style(
         self, sample_project: Path
@@ -366,6 +393,30 @@ class TestExportCommand:
         assert result.exit_code == 0, result.output
         assert "ltail=" not in result.output
         assert "lhead=" not in result.output
+
+    def test_export_exclude_common_noise_paths(self, tmp_path: Path) -> None:
+        src_pkg = tmp_path / "src" / "mypkg"
+        tests_pkg = tmp_path / "tests"
+        src_pkg.mkdir(parents=True)
+        tests_pkg.mkdir(parents=True)
+        (src_pkg / "__init__.py").write_text("")
+        (src_pkg / "core.py").write_text("x = 1\n")
+        (tests_pkg / "test_core.py").write_text("import mypkg.core\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "export",
+                str(tmp_path),
+                "--format",
+                "dot",
+                "--exclude-common-noise-paths",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "tests/test_core.py" not in result.output
+        assert "src/mypkg/core.py" in result.output
 
 
 class TestVersionCommand:

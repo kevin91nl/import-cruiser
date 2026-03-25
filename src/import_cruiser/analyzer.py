@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import ast
 import os
+import re
+import warnings
 from pathlib import Path
 
 from import_cruiser.graph import Dependency, DependencyGraph, Module
@@ -27,7 +29,11 @@ def _module_name_from_path(
 def _collect_imports(source: str, module_name: str) -> list[tuple[str, int]]:
     """Return list of (import_name, line_no) extracted from *source*."""
     try:
-        tree = ast.parse(source)
+        # Some real-world files trigger SyntaxWarning (e.g. invalid escape
+        # sequences in strings); keep CLI output quiet by default.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", SyntaxWarning)
+            tree = ast.parse(source)
     except SyntaxError:
         return []
 
@@ -87,7 +93,11 @@ def _collect_imports(source: str, module_name: str) -> list[tuple[str, int]]:
     return imports
 
 
-def _iter_python_files(directory: Path) -> list[Path]:
+def _iter_python_files(
+    directory: Path,
+    include_paths: list[re.Pattern[str]] | None = None,
+    exclude_paths: list[re.Pattern[str]] | None = None,
+) -> list[Path]:
     py_files: list[Path] = []
     for dirpath, dirnames, filenames in os.walk(directory):
         # Skip hidden directories and common noise
@@ -96,28 +106,56 @@ def _iter_python_files(directory: Path) -> list[Path]:
         ]
         for filename in filenames:
             if filename.endswith(".py"):
-                py_files.append(Path(dirpath) / filename)
+                path = Path(dirpath) / filename
+                path_text = str(path).replace("\\", "/")
+                if include_paths and not any(
+                    pattern.search(path_text) for pattern in include_paths
+                ):
+                    continue
+                if exclude_paths and any(
+                    pattern.search(path_text) for pattern in exclude_paths
+                ):
+                    continue
+                py_files.append(path)
     return py_files
 
 
 class Analyzer:
     """Analyze a Python project directory and produce a DependencyGraph."""
 
-    def __init__(self, root: str | Path, normalize_hyphens: bool = True) -> None:
-        self.root = Path(root).resolve()
+    def __init__(
+        self,
+        root: str | Path,
+        normalize_hyphens: bool = True,
+        include_paths: list[str] | None = None,
+        exclude_paths: list[str] | None = None,
+    ) -> None:
+        # Keep the user-provided path form (e.g. /private/tmp vs /tmp) so
+        # include/exclude path regexes match what users pass on the CLI.
+        self.root = Path(root).expanduser().absolute()
         self.normalize_hyphens = normalize_hyphens
+        self.include_paths = [re.compile(p) for p in include_paths or []]
+        self.exclude_paths = [re.compile(p) for p in exclude_paths or []]
 
     def analyze(self) -> DependencyGraph:
-        """Walk the project directory and return a fully populated DependencyGraph."""
+        """Walk the project directory and return a populated graph."""
         graph = DependencyGraph()
-        py_files = _iter_python_files(self.root)
+        py_files = _iter_python_files(
+            self.root,
+            include_paths=self.include_paths or None,
+            exclude_paths=self.exclude_paths or None,
+        )
         source_roots = _find_source_roots(self.root)
 
         # First pass: register all modules
         module_map: dict[str, Path] = {}
         for py_file in py_files:
             base = _select_source_root(py_file, source_roots) or self.root
-            mod_name = _module_name_from_path(py_file, base, self.normalize_hyphens)
+            mod_name = _module_name_from_path(
+                py_file,
+                base,
+                self.normalize_hyphens,
+            )
             module_map[mod_name] = py_file
             graph.add_module(Module(name=mod_name, path=str(py_file)))
 
@@ -158,7 +196,7 @@ def _find_source_roots(root: Path) -> list[Path]:
     roots: list[Path] = []
     for dirpath, dirnames, filenames in os.walk(root):
         if os.path.basename(dirpath) == "src":
-            src_path = Path(dirpath).resolve()
+            src_path = Path(dirpath).absolute()
             if _contains_python_files(src_path):
                 roots.append(src_path)
     return roots

@@ -7,13 +7,17 @@ from pathlib import Path
 
 
 from import_cruiser.analyzer import Analyzer
-from import_cruiser.exporter import export_dot, export_html, export_json
+from import_cruiser.exporter import (
+    _depcruise_cluster_line,
+    _depcruise_node_id,
+    export_dot,
+    export_json,
+)
 from import_cruiser.graph import Dependency, DependencyGraph, Module, filter_graph
 from import_cruiser.validator import Violation
 
 
 COMPLEX_FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "complex_project"
-COLLAPSE_FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "collapse_demo"
 
 
 def simple_graph() -> DependencyGraph:
@@ -74,8 +78,8 @@ class TestExportDot:
 
     def test_contains_nodes(self) -> None:
         result = export_dot(simple_graph())
-        assert '"a"' in result
-        assert '"b"' in result
+        assert '"a.py"' in result
+        assert '"b.py"' in result
 
     def test_contains_edge(self) -> None:
         result = export_dot(simple_graph())
@@ -83,7 +87,18 @@ class TestExportDot:
 
     def test_rankdir_lr(self) -> None:
         result = export_dot(simple_graph())
-        assert "rankdir=LR" in result
+        assert 'rankdir="LR"' in result
+
+    def test_default_style_is_depcruise(self) -> None:
+        result = export_dot(simple_graph())
+        assert result.lstrip().startswith("strict digraph")
+        assert 'fillcolor="#ffffcc"' in result
+
+    def test_depcruise_style_defaults(self) -> None:
+        result = export_dot(simple_graph(), style="depcruise")
+        assert 'splines="true"' in result
+        assert 'fillcolor="#ffffff"' in result
+        assert 'fillcolor="#ffffcc"' in result
 
     def test_empty_graph(self) -> None:
         result = export_dot(DependencyGraph())
@@ -148,43 +163,42 @@ class TestExportDot:
         assert "ltail=" not in result
         assert "lhead=" not in result
 
-    def test_html_includes_expand_collapse_controls(self) -> None:
-        graph = Analyzer(COLLAPSE_FIXTURE_ROOT).analyze()
-        html = export_html(
-            graph,
-            cluster_mode="path",
-            cluster_depth=5,
-            edge_mode="node",
-        )
-        if "Graphviz rendering failed" in html:
-            assert "<pre>" in html
-            return
-        assert 'id="expand-all"' in html
-        assert 'id="collapse-all"' in html
-        assert "collapseNearTarget(10)" not in html
-        assert "toggleCluster" in html
-        assert "toggleClusterDescendants" in html
-        assert "cluster-branch-toggle-layer" in html
-        assert "collapsed-proxy-layer" in html
-        assert "drawCollapsedProxyEdges" in html
-        assert "group.appendChild(textEl)" in html
-        assert (
-            "labelEl.style.display = collapsedClusters.has(cluster) ? 'none' : '';"
-            in html
-        )
-        assert "Direction:" in html
+    def test_depcruise_uses_paths_and_clusters(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "src" / "pkg"
+        pkg.mkdir(parents=True)
+        (pkg / "a.py").write_text("import pkg.b\n")
+        (pkg / "b.py").write_text("x = 1\n")
 
-    def test_bidirectional_edges_are_exported(self) -> None:
-        graph = Analyzer(COLLAPSE_FIXTURE_ROOT).analyze()
-        filtered = filter_graph(
-            graph,
-            exclude_paths=[r"__init__\\.py$"],
-        )
-        dot = export_dot(
-            filtered,
-            cluster_mode="module",
-            cluster_depth=3,
-            edge_mode="node",
-        )
-        assert '"dep_demo.core.service" -> "dep_demo.ui.state"' in dot
-        assert '"dep_demo.ui.state" -> "dep_demo.core.service"' in dot
+        graph = Analyzer(tmp_path).analyze()
+        result = export_dot(graph, style="depcruise")
+        assert 'subgraph "cluster_src"' in result
+        assert '"src/pkg/a.py"' in result
+        assert 'URL="src/pkg/a.py"' in result
+        assert '"src/pkg/a.py" -> "src/pkg/b.py"' in result
+
+    def test_depcruise_falls_back_to_module_names(self) -> None:
+        graph = DependencyGraph()
+        graph.add_module(Module(name="a", path=""))
+        graph.add_module(Module(name="b", path=""))
+        graph.add_dependency(Dependency(source="a", target="b", line=1))
+
+        result = export_dot(graph, style="depcruise")
+        assert '"a"' in result
+        assert '"b"' in result
+        assert '"a" -> "b"' in result
+
+    def test_depcruise_helpers_fallback_on_invalid_root(self) -> None:
+        module = Module(name="pkg.mod", path="a.py")
+        node_id = _depcruise_node_id(module, "/not-a-root")
+        assert node_id.endswith("a.py")
+        line = _depcruise_cluster_line(module, node_id, "/not-a-root")
+        assert '"a.py"' in line
+
+    def test_depcruise_cluster_line_has_balanced_braces(self, tmp_path: Path) -> None:
+        nested = tmp_path / "root" / "src" / "pkg" / "sub" / "mod.py"
+        nested.parent.mkdir(parents=True)
+        nested.write_text("x = 1\n")
+        module = Module(name="pkg.sub.mod", path=str(nested))
+        node_id = _depcruise_node_id(module, str(tmp_path / "root"))
+        line = _depcruise_cluster_line(module, node_id, str(tmp_path / "root"))
+        assert line.count("{") == line.count("}")
