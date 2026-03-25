@@ -428,8 +428,8 @@ def _depcruise_node_id(module: Module, root: str | None) -> str:
 
 
 def _depcruise_cluster_line(module: Module, node_id: str, root: str | None) -> str:
-    label = Path(module.path).name if module.path else module.name
     rel_path = node_id if module.path else module.name
+    label = Path(module.path).name if module.path else module.name
     parts: list[str] = []
     if module.path:
         try:
@@ -855,6 +855,7 @@ def _html_with_svg(svg: str, title: str) -> str:
             padding: 8px 12px;
             border-bottom: 1px solid #e5e7eb;
             background: #ffffff;
+            overflow: hidden;
         }}
         .toolbar .spacer {{
             flex: 1;
@@ -888,6 +889,9 @@ def _html_with_svg(svg: str, title: str) -> str:
             padding: 3px 8px;
             background: #f9fafb;
             white-space: nowrap;
+            max-width: 34vw;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }}
         .canvas {{
             width: 100vw;
@@ -1050,10 +1054,9 @@ def _html_with_svg(svg: str, title: str) -> str:
         }});
 
         if (repos.size) {{
-            repoBadge.textContent = `Repos: ${{[...repos].sort().join(', ')}}`;
+            repoBadge.textContent = `Repos: ${{[...repos].sort().join(' + ')}}`;
         }} else if (packageRoots.size) {{
-            repoBadge.textContent =
-                `Packages: ${{[...packageRoots].sort().slice(0, 4).join(', ')}}`;
+            repoBadge.textContent = `Packages: ${{packageRoots.size}}`;
         }} else {{
             repoBadge.textContent = 'Repos: unknown';
         }}
