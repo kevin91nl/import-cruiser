@@ -26,6 +26,7 @@ from import_cruiser.graph import (
     collapse_graph,
     detect_cycles,
     filter_graph,
+    prune_isolated_modules,
     prune_orphan_init_modules,
 )
 from import_cruiser.validator import Validator, Violation
@@ -36,7 +37,21 @@ DEFAULT_NOISE_PATH_PATTERNS: tuple[str, ...] = (
     r"/site-packages/",
     r"/tests/",
     r"/scripts/",
+    r"/examples/",
+    r"/stress/",
     r"/migrations/",
+)
+
+DB_CONNECTOR_IMPORT_PATTERNS: tuple[str, ...] = (
+    r"(^|\.)sqlalchemy(\.|$)",
+    r"(^|\.)sqlmodel(\.|$)",
+    r"(^|\.)alembic(\.|$)",
+    r"(^|\.)psycopg(2)?(\.|$)",
+    r"(^|\.)asyncpg(\.|$)",
+    r"(^|\.)pg8000(\.|$)",
+    r"(^|\.)aiopg(\.|$)",
+    r"(^|\.)databases(\.|$)",
+    r"(^|\.)postgres(\.|$)",
 )
 
 
@@ -125,7 +140,7 @@ def main() -> None:
     show_default=True,
     help=(
         "Exclude common noise paths "
-        "(tests/scripts/migrations) from graph generation."
+        "(tests/scripts/examples/stress/migrations) from graph generation."
     ),
 )
 @click.option(
@@ -180,6 +195,24 @@ def main() -> None:
     show_default=True,
     help="Edge rendering mode for graphs.",
 )
+@click.option(
+    "--prune-isolated/--keep-isolated",
+    default=False,
+    show_default=True,
+    help="Drop modules without incoming/outgoing edges after filtering.",
+)
+@click.option(
+    "--include-db-connectors/--no-include-db-connectors",
+    default=False,
+    show_default=True,
+    help="Include DB connector imports as external nodes.",
+)
+@click.option(
+    "--include-http-hosts/--no-include-http-hosts",
+    default=False,
+    show_default=True,
+    help="Include HTTP request hosts as external nodes.",
+)
 def cmd_analyze(
     path: str,
     output: Optional[str],
@@ -201,6 +234,9 @@ def cmd_analyze(
     aggregate_depth: int,
     leaf_pattern: tuple[str, ...],
     edge_mode: str,
+    prune_isolated: bool,
+    include_db_connectors: bool,
+    include_http_hosts: bool,
 ) -> None:
     """Analyze Python import dependencies in PATH and output results.
 
@@ -215,6 +251,8 @@ def cmd_analyze(
         normalize_hyphens=normalize_hyphens,
         include_paths=list(include_path),
         exclude_paths=effective_exclude_paths,
+        include_external_patterns=_external_patterns_for_db(include_db_connectors),
+        include_http_hosts=include_http_hosts,
     ).analyze()
     graph, layout, rankdir, cluster_depth, cluster_mode, style, edge_mode = (
         _apply_graph_options(
@@ -234,6 +272,7 @@ def cmd_analyze(
             rankdir=rankdir,
             style=style,
             edge_mode=edge_mode,
+            prune_isolated=prune_isolated,
         )
     )
 
@@ -428,7 +467,7 @@ def cmd_validate(
     show_default=True,
     help=(
         "Exclude common noise paths "
-        "(tests/scripts/migrations) from graph generation."
+        "(tests/scripts/examples/stress/migrations) from graph generation."
     ),
 )
 @click.option(
@@ -484,6 +523,24 @@ def cmd_validate(
     help="Edge rendering mode for graphs.",
 )
 @click.option(
+    "--prune-isolated/--keep-isolated",
+    default=False,
+    show_default=True,
+    help="Drop modules without incoming/outgoing edges after filtering.",
+)
+@click.option(
+    "--include-db-connectors/--no-include-db-connectors",
+    default=False,
+    show_default=True,
+    help="Include DB connector imports as external nodes.",
+)
+@click.option(
+    "--include-http-hosts/--no-include-http-hosts",
+    default=False,
+    show_default=True,
+    help="Include HTTP request hosts as external nodes.",
+)
+@click.option(
     "--output",
     "-o",
     type=click.Path(dir_okay=False, writable=True),
@@ -511,6 +568,9 @@ def cmd_export(
     aggregate_depth: int,
     leaf_pattern: tuple[str, ...],
     edge_mode: str,
+    prune_isolated: bool,
+    include_db_connectors: bool,
+    include_http_hosts: bool,
     output: Optional[str],
 ) -> None:
     """Export the dependency graph of PATH to the specified format.
@@ -527,6 +587,8 @@ def cmd_export(
         normalize_hyphens=normalize_hyphens,
         include_paths=list(include_path),
         exclude_paths=effective_exclude_paths,
+        include_external_patterns=_external_patterns_for_db(include_db_connectors),
+        include_http_hosts=include_http_hosts,
     ).analyze()
     graph, layout, rankdir, cluster_depth, cluster_mode, style, edge_mode = (
         _apply_graph_options(
@@ -546,6 +608,7 @@ def cmd_export(
             rankdir=rankdir,
             style=style,
             edge_mode=edge_mode,
+            prune_isolated=prune_isolated,
         )
     )
     violations = _load_violations(config_path, graph)
@@ -593,8 +656,9 @@ def _write_output(content: str, output: Optional[str]) -> None:
     if content and not content.endswith("\n"):
         content += "\n"
     if output:
-        Path(output).write_text(content, encoding="utf-8")
-        click.echo(f"Output written to {output}", err=True)
+        output_path = Path(output).resolve()
+        output_path.write_text(content, encoding="utf-8")
+        click.echo(f"Output written to {output_path}", err=True)
     else:
         click.echo(content)
 
@@ -610,6 +674,14 @@ def _effective_exclude_paths(
         if pattern not in effective:
             effective.append(pattern)
     return effective
+
+
+def _external_patterns_for_db(
+    include_db_connectors: bool,
+) -> list[str]:
+    if not include_db_connectors:
+        return []
+    return list(DB_CONNECTOR_IMPORT_PATTERNS)
 
 
 def _apply_graph_options(
@@ -629,6 +701,7 @@ def _apply_graph_options(
     rankdir: str,
     style: str,
     edge_mode: str,
+    prune_isolated: bool,
 ):
     filtered = filter_graph(
         graph,
@@ -693,6 +766,8 @@ def _apply_graph_options(
 
     collapsed = collapse_graph(filtered, collapse_depth)
     pruned = prune_orphan_init_modules(collapsed)
+    if prune_isolated:
+        pruned = prune_isolated_modules(pruned)
     return pruned, layout, rankdir, cluster_depth, cluster_mode, style, edge_mode
 
 

@@ -56,6 +56,7 @@ class TestAnalyzeCommand:
             main, ["analyze", str(sample_project), "--output", str(out_file)]
         )
         assert result.exit_code == 0, result.output
+        assert f"Output written to {out_file.resolve()}" in result.output
         assert out_file.exists()
         data = json.loads(out_file.read_text())
         assert "modules" in data
@@ -67,14 +68,37 @@ class TestAnalyzeCommand:
         data = json.loads(result.output)
         assert data["summary"]["cycles"] >= 1
 
+    def test_analyze_include_db_connectors(self, tmp_path: Path) -> None:
+        (tmp_path / "app.py").write_text("import sqlalchemy.orm\n" "import psycopg\n")
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "analyze",
+                str(tmp_path),
+                "--include-db-connectors",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        module_names = {module["name"] for module in data["modules"]}
+        assert "sqlalchemy" in module_names
+        assert "psycopg" in module_names
+
     def test_analyze_exclude_common_noise_paths(self, tmp_path: Path) -> None:
         src_pkg = tmp_path / "src" / "mypkg"
         tests_pkg = tmp_path / "tests"
+        examples_pkg = tmp_path / "examples"
+        stress_pkg = tmp_path / "stress"
         src_pkg.mkdir(parents=True)
         tests_pkg.mkdir(parents=True)
+        examples_pkg.mkdir(parents=True)
+        stress_pkg.mkdir(parents=True)
         (src_pkg / "__init__.py").write_text("")
         (src_pkg / "core.py").write_text("x = 1\n")
         (tests_pkg / "test_core.py").write_text("import mypkg.core\n")
+        (examples_pkg / "demo.py").write_text("import mypkg.core\n")
+        (stress_pkg / "bench.py").write_text("import mypkg.core\n")
 
         runner = CliRunner()
         result = runner.invoke(
@@ -90,6 +114,8 @@ class TestAnalyzeCommand:
         module_names = {module["name"] for module in data["modules"]}
         assert "mypkg.core" in module_names
         assert "tests.test_core" not in module_names
+        assert "examples.demo" not in module_names
+        assert "stress.bench" not in module_names
 
 
 class TestValidateCommand:
@@ -397,11 +423,17 @@ class TestExportCommand:
     def test_export_exclude_common_noise_paths(self, tmp_path: Path) -> None:
         src_pkg = tmp_path / "src" / "mypkg"
         tests_pkg = tmp_path / "tests"
+        examples_pkg = tmp_path / "examples"
+        stress_pkg = tmp_path / "stress"
         src_pkg.mkdir(parents=True)
         tests_pkg.mkdir(parents=True)
+        examples_pkg.mkdir(parents=True)
+        stress_pkg.mkdir(parents=True)
         (src_pkg / "__init__.py").write_text("")
         (src_pkg / "core.py").write_text("x = 1\n")
         (tests_pkg / "test_core.py").write_text("import mypkg.core\n")
+        (examples_pkg / "demo.py").write_text("import mypkg.core\n")
+        (stress_pkg / "bench.py").write_text("import mypkg.core\n")
 
         runner = CliRunner()
         result = runner.invoke(
@@ -416,7 +448,61 @@ class TestExportCommand:
         )
         assert result.exit_code == 0, result.output
         assert "tests/test_core.py" not in result.output
+        assert "examples/demo.py" not in result.output
+        assert "stress/bench.py" not in result.output
         assert "src/mypkg/core.py" in result.output
+
+    def test_export_include_http_hosts(self, tmp_path: Path) -> None:
+        (tmp_path / "api_client.py").write_text(
+            "import requests\n" "requests.get('https://api.github.com/users')\n"
+        )
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "export",
+                str(tmp_path),
+                "--format",
+                "dot",
+                "--include-http-hosts",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "api.github.com" in result.output
+
+    def test_export_include_path_keeps_connected_external_nodes(
+        self, tmp_path: Path
+    ) -> None:
+        in_scope = tmp_path / "src" / "mypkg"
+        out_scope = tmp_path / "other"
+        in_scope.mkdir(parents=True)
+        out_scope.mkdir(parents=True)
+        (in_scope / "__init__.py").write_text("")
+        (in_scope / "api.py").write_text(
+            "import sqlalchemy.orm\n"
+            "import requests\n"
+            "requests.get('https://api.github.com/users')\n"
+        )
+        (out_scope / "skip.py").write_text("import psycopg\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "export",
+                str(tmp_path),
+                "--format",
+                "dot",
+                "--include-path",
+                rf"^{tmp_path.as_posix()}/src/",
+                "--include-db-connectors",
+                "--include-http-hosts",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "sqlalchemy" in result.output
+        assert "api.github.com" in result.output
+        assert "psycopg" not in result.output
 
 
 class TestVersionCommand:

@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import ast
 import textwrap
 from pathlib import Path
 
 
 from import_cruiser.analyzer import (
     Analyzer,
+    _collect_http_hosts,
+    _http_host_from_text,
+    _http_host_from_expr,
+    _is_url_like_target,
+    _render_joined_str,
     _collect_imports,
     _module_name_from_path,
 )
@@ -96,6 +102,30 @@ class TestAnalyzer:
         assert "os" not in mod_names
         assert len(graph.dependencies) == 0
 
+    def test_db_external_imports_included_when_configured(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        self._make_project(
+            tmp_path,
+            {
+                "mod.py": "import sqlalchemy.orm\nimport psycopg\n",
+            },
+        )
+        graph = Analyzer(
+            tmp_path,
+            include_external_patterns=[
+                r"(^|\.)sqlalchemy(\.|$)",
+                r"(^|\.)psycopg(\.|$)",
+            ],
+        ).analyze()
+        mod_names = {m.name for m in graph.modules}
+        assert "sqlalchemy" in mod_names
+        assert "psycopg" in mod_names
+        dep_pairs = {(d.source, d.target) for d in graph.dependencies}
+        assert ("mod", "sqlalchemy") in dep_pairs
+        assert ("mod", "psycopg") in dep_pairs
+
     def test_multiple_modules(self, tmp_path: Path) -> None:
         self._make_project(
             tmp_path,
@@ -164,6 +194,85 @@ class TestAnalyzer:
         assert "pkg.keep" in mod_names
         assert "pkg.skip" not in mod_names
 
+    def test_http_hosts_detected_when_enabled(self, tmp_path: Path) -> None:
+        self._make_project(
+            tmp_path,
+            {
+                "api_client.py": (
+                    "import requests\n"
+                    "requests.get('https://api.github.com/users')\n"
+                    "requests.post('http://example.org/v1/items')\n"
+                )
+            },
+        )
+        graph = Analyzer(tmp_path, include_http_hosts=True).analyze()
+        mod_names = {m.name for m in graph.modules}
+        assert "api.github.com" in mod_names
+        assert "example.org" in mod_names
+        dep_pairs = {(d.source, d.target) for d in graph.dependencies}
+        assert ("api_client", "api.github.com") in dep_pairs
+        assert ("api_client", "example.org") in dep_pairs
+
+    def test_http_hosts_detected_from_url_variable(self, tmp_path: Path) -> None:
+        self._make_project(
+            tmp_path,
+            {
+                "client.py": (
+                    "import httpx\n"
+                    "url = 'https://api.c99.nl/subdomainfinder'\n"
+                    "async def run():\n"
+                    "    async with httpx.AsyncClient() as c:\n"
+                    "        await c.get(url)\n"
+                )
+            },
+        )
+        graph = Analyzer(tmp_path, include_http_hosts=True).analyze()
+        mod_names = {m.name for m in graph.modules}
+        assert "api.c99.nl" in mod_names
+        dep_pairs = {(d.source, d.target) for d in graph.dependencies}
+        assert ("client", "api.c99.nl") in dep_pairs
+
+    def test_http_hosts_detected_from_fstring_variable(self, tmp_path: Path) -> None:
+        self._make_project(
+            tmp_path,
+            {
+                "client.py": (
+                    "import httpx\n"
+                    "ip = '1.1.1.1'\n"
+                    "url = f'https://api.shodan.io/shodan/host/{ip}'\n"
+                    "async def run():\n"
+                    "    async with httpx.AsyncClient() as c:\n"
+                    "        await c.get(url)\n"
+                )
+            },
+        )
+        graph = Analyzer(tmp_path, include_http_hosts=True).analyze()
+        mod_names = {m.name for m in graph.modules}
+        assert "api.shodan.io" in mod_names
+        dep_pairs = {(d.source, d.target) for d in graph.dependencies}
+        assert ("client", "api.shodan.io") in dep_pairs
+
+    def test_http_hosts_detected_from_base_url_variable_in_fstring(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        self._make_project(
+            tmp_path,
+            {
+                "client.py": (
+                    "_LOGO_DEV_BASE_URL = 'https://img.logo.dev'\n"
+                    "domain = 'example.com'\n"
+                    "url = f'{_LOGO_DEV_BASE_URL}/{domain}'\n"
+                    "x = url\n"
+                )
+            },
+        )
+        graph = Analyzer(tmp_path, include_http_hosts=True).analyze()
+        mod_names = {m.name for m in graph.modules}
+        assert "img.logo.dev" in mod_names
+        dep_pairs = {(d.source, d.target) for d in graph.dependencies}
+        assert ("client", "img.logo.dev") in dep_pairs
+
 
 def test_source_root_detection(tmp_path: Path) -> None:
     src = tmp_path / "proj" / "src" / "pkg"
@@ -173,3 +282,53 @@ def test_source_root_detection(tmp_path: Path) -> None:
 
     graph = Analyzer(tmp_path).analyze()
     assert "pkg.mod" in {m.name for m in graph.modules}
+
+
+def test_collect_http_hosts_handles_syntax_error() -> None:
+    assert _collect_http_hosts("def broken(") == []
+
+
+def test_collect_http_hosts_detects_annotated_and_scoped_urls() -> None:
+    source = (
+        "url: str = 'https://api.example.com/v1'\n"
+        "class C:\n"
+        "    endpoint = 'https://class.example.com/v1'\n"
+        "def fn():\n"
+        "    uri = 'https://fn.example.com/v1'\n"
+        "    return uri\n"
+    )
+    hosts = {host for host, _ in _collect_http_hosts(source)}
+    assert "api.example.com" in hosts
+    assert "class.example.com" in hosts
+    assert "fn.example.com" in hosts
+
+
+def test_http_host_text_edge_cases() -> None:
+    assert _http_host_from_text("https:///path") is None
+    assert _http_host_from_text("https://:443/path") is None
+
+
+def test_render_joined_str_and_url_target_edges() -> None:
+    scheme_only = _render_joined_str(
+        ast.parse("f'https://{host}'", mode="eval").body,
+        [{"host": "api.shodan.io"}],
+    )
+    assert scheme_only == "https://api.shodan.io"
+
+    resolved = _render_joined_str(
+        ast.parse("f'https://api.{domain}/v1'", mode="eval").body,
+        [{"domain": "shodan.io"}],
+    )
+    assert resolved == "https://api.shodan.io/v1"
+
+    invalid_joined = ast.JoinedStr(values=[ast.Name(id="value", ctx=ast.Load())])
+    assert _render_joined_str(invalid_joined, [{"value": "x"}]) is None
+    assert _http_host_from_expr(invalid_joined, [{"value": "x"}]) is None
+    assert _http_host_from_expr(ast.parse("1 + 2", mode="eval").body, []) is None
+    assert not _is_url_like_target(
+        ast.Attribute(
+            value=ast.Name(id="x", ctx=ast.Load()),
+            attr="url",
+            ctx=ast.Load(),
+        )
+    )

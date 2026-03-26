@@ -14,6 +14,19 @@ from import_cruiser.graph import Dependency, DependencyGraph, Module, detect_cyc
 
 JSONDict = dict[str, object]
 
+DB_EXTERNAL_MODULES: set[str] = {
+    "sqlalchemy",
+    "sqlmodel",
+    "alembic",
+    "psycopg",
+    "psycopg2",
+    "asyncpg",
+    "pg8000",
+    "aiopg",
+    "databases",
+    "postgres",
+}
+
 
 class ViolationLike(Protocol):
     source: str
@@ -91,8 +104,14 @@ def export_dot(
 
     graph_attrs, node_attrs, edge_attrs = _style_attrs(style, rankdir)
     depcruise = style == "depcruise"
-    node_id_map: dict[str, str] = {}
     path_root = _common_root(graph.modules) if cluster_mode == "path" else None
+    http_nodes = {
+        module.name
+        for module in graph.modules
+        if _is_http_external_node(module.name, module.path)
+    }
+    external_anchor_parts = _external_anchor_parts(graph, path_root)
+    node_id_map: dict[str, str] = {}
     lines = _init_dot_lines(
         graph_name=graph_name,
         graph_attrs=graph_attrs,
@@ -109,6 +128,7 @@ def export_dot(
             modules=graph.modules,
             node_id_map=node_id_map,
             path_root=path_root,
+            external_anchor_parts=external_anchor_parts,
         )
     else:
         node_to_cluster, cluster_index = _append_standard_nodes(
@@ -138,6 +158,7 @@ def export_dot(
             violation_edges=violation_edges,
             cycle_edges=cycle_edges,
             depcruise=depcruise,
+            http_nodes=http_nodes,
         )
 
     lines.append("}")
@@ -173,11 +194,23 @@ def _append_depcruise_nodes(
     modules: list[Module],
     node_id_map: dict[str, str],
     path_root: str | None,
+    external_anchor_parts: dict[str, list[str]],
 ) -> None:
     for module in sorted(modules, key=lambda m: m.name):
-        node_id = _depcruise_node_id(module, path_root)
+        node_id = _depcruise_node_id(
+            module,
+            path_root,
+            external_anchor_parts=external_anchor_parts,
+        )
         node_id_map[module.name] = node_id
-        lines.append(_depcruise_cluster_line(module, node_id, path_root))
+        lines.append(
+            _depcruise_cluster_line(
+                module,
+                node_id,
+                path_root,
+                external_anchor_parts=external_anchor_parts,
+            )
+        )
     if modules:
         lines.append("")
 
@@ -280,6 +313,7 @@ def _append_dependency_edges(
     violation_edges: dict[tuple[str, str], ViolationLike],
     cycle_edges: set[tuple[str, str]],
     depcruise: bool,
+    http_nodes: set[str],
 ) -> None:
     for dep in sorted(dependencies, key=lambda d: (d.source, d.target)):
         src = _dot_id(node_id_map.get(dep.source, dep.source))
@@ -290,6 +324,11 @@ def _append_dependency_edges(
             lines.append(f'    {src} -> {tgt} [color="{color}", penwidth=2.2];')
         elif (dep.source, dep.target) in cycle_edges and not depcruise:
             lines.append(f'    {src} -> {tgt} [color="#C0392B", penwidth=1.6];')
+        elif depcruise and dep.target in http_nodes:
+            lines.append(
+                f'    {src} -> {tgt} [color="#1D4ED8", style="dashed", '
+                "penwidth=1.4, arrowsize=0.7]"
+            )
         else:
             suffix = "" if depcruise else ";"
             lines.append(f"    {src} -> {tgt}{suffix}")
@@ -415,8 +454,15 @@ def _dot_id(name: str) -> str:
     return '"' + name.replace('"', '\\"') + '"'
 
 
-def _depcruise_node_id(module: Module, root: str | None) -> str:
+def _depcruise_node_id(
+    module: Module,
+    root: str | None,
+    external_anchor_parts: dict[str, list[str]] | None = None,
+) -> str:
     if not module.path:
+        anchor = (external_anchor_parts or {}).get(module.name, [])
+        if anchor:
+            return "/".join([*anchor, module.name])
         return module.name
     try:
         path = Path(module.path).resolve()
@@ -427,9 +473,15 @@ def _depcruise_node_id(module: Module, root: str | None) -> str:
         return module.path.replace("\\", "/")
 
 
-def _depcruise_cluster_line(module: Module, node_id: str, root: str | None) -> str:
+def _depcruise_cluster_line(
+    module: Module,
+    node_id: str,
+    root: str | None,
+    external_anchor_parts: dict[str, list[str]] | None = None,
+) -> str:
     rel_path = node_id if module.path else module.name
     label = Path(module.path).name if module.path else module.name
+    attrs = _depcruise_node_attrs(module, label, rel_path)
     parts: list[str] = []
     if module.path:
         try:
@@ -439,12 +491,11 @@ def _depcruise_cluster_line(module: Module, node_id: str, root: str | None) -> s
             parts = list(path.parts[:-1])
         except ValueError:
             parts = list(Path(module.path).parts[:-1])
+    elif external_anchor_parts:
+        parts = external_anchor_parts.get(module.name, [])
 
     if not parts:
-        return (
-            f'    {_dot_id(node_id)} [label=<{label}> tooltip="{label}" '
-            f'URL="{rel_path}" ]'
-        )
+        return f"    {_dot_id(node_id)} [{attrs} ]"
 
     line = f'    subgraph "cluster_{parts[0]}" {{label="{parts[0]}" '
     prefix = parts[0]
@@ -452,11 +503,26 @@ def _depcruise_cluster_line(module: Module, node_id: str, root: str | None) -> s
         prefix = f"{prefix}/{part}"
         line += f'subgraph "cluster_{prefix}" {{label="{part}" '
 
-    line += (
-        f'{_dot_id(node_id)} [label=<{label}> tooltip="{label}" ' f'URL="{rel_path}" ] '
-    )
+    line += f"{_dot_id(node_id)} [{attrs} ] "
     line += "}" * len(parts)
     return line
+
+
+def _depcruise_node_attrs(module: Module, label: str, rel_path: str) -> str:
+    base = f'label=<{label}> tooltip="{label}" URL="{rel_path}"'
+    if _is_database_external_node(module.name, module.path):
+        return (
+            f'{base} shape="cylinder" style="filled" '
+            'fillcolor="#FFE7CC" color="#B45309" penwidth="1.4" '
+            'fontcolor="#7C2D12"'
+        )
+    if _is_http_external_node(module.name, module.path):
+        return (
+            f'{base} shape="box" style="rounded,filled,dashed" '
+            'fillcolor="#DBEAFE" color="#1D4ED8" penwidth="1.4" '
+            'fontcolor="#1E3A8A"'
+        )
+    return base
 
 
 def _dot_node_lines(
@@ -704,7 +770,7 @@ def _style_attrs(style: str, rankdir: str) -> tuple[str, str, str]:
         )
         edge_attrs = (
             'arrowhead="normal" arrowsize="0.6" penwidth="2.0" '
-            'color="#00000033" fontname="Helvetica" fontsize="9"'
+            'color="#0000001f" fontname="Helvetica" fontsize="9"'
         )
         return graph_attrs, node_attrs, edge_attrs
 
@@ -762,9 +828,77 @@ def _style_attrs(style: str, rankdir: str) -> tuple[str, str, str]:
     )
     edge_attrs = (
         'arrowhead="normal", arrowsize=0.6, penwidth=2.0, '
-        'color="#00000033", fontname="Helvetica", fontsize=9'
+        'color="#0000001f", fontname="Helvetica", fontsize=9'
     )
     return graph_attrs, node_attrs, edge_attrs
+
+
+def _is_database_external_node(name: str, path: str) -> bool:
+    if path:
+        return False
+    return name.split(".", 1)[0] in DB_EXTERNAL_MODULES
+
+
+def _is_http_external_node(name: str, path: str) -> bool:
+    if path:
+        return False
+    if "/" in name or ":" in name:
+        return False
+    if "." not in name:
+        return False
+    root = name.split(".", 1)[0]
+    return root not in DB_EXTERNAL_MODULES
+
+
+def _external_anchor_parts(
+    graph: DependencyGraph,
+    path_root: str | None,
+) -> dict[str, list[str]]:
+    module_map = {module.name: module for module in graph.modules}
+    source_parts_by_external: dict[str, list[list[str]]] = {}
+    for dep in graph.dependencies:
+        target_module = module_map.get(dep.target)
+        source_module = module_map.get(dep.source)
+        if target_module is None or source_module is None:
+            continue
+        if target_module.path:
+            continue
+        if not source_module.path:
+            continue
+        parts = _module_parent_parts(source_module.path, path_root)
+        if not parts:
+            continue
+        source_parts_by_external.setdefault(target_module.name, []).append(parts)
+
+    return {
+        external: _common_prefix(parts_list)
+        for external, parts_list in source_parts_by_external.items()
+    }
+
+
+def _module_parent_parts(path: str, path_root: str | None) -> list[str]:
+    try:
+        parent = Path(path).resolve().parent
+        if path_root:
+            parent = parent.relative_to(Path(path_root).resolve())
+        return list(parent.parts)
+    except ValueError:
+        return list(Path(path).resolve().parent.parts)
+
+
+def _common_prefix(parts_list: list[list[str]]) -> list[str]:
+    if not parts_list:
+        return []
+    prefix = parts_list[0][:]
+    for parts in parts_list[1:]:
+        idx = 0
+        max_len = min(len(prefix), len(parts))
+        while idx < max_len and prefix[idx] == parts[idx]:
+            idx += 1
+        prefix = prefix[:idx]
+        if not prefix:
+            break
+    return prefix
 
 
 def _render_dot(dot: str, fmt: str, engine: str = "dot") -> str:
@@ -881,6 +1015,11 @@ def _html_with_svg(svg: str, title: str) -> str:
         .toolbar button:hover {{
             background: #f9fafb;
         }}
+        .toolbar button.toggled {{
+            border-color: #7f1d1d;
+            background: #fee2e2;
+            color: #7f1d1d;
+        }}
         .toolbar .badge {{
             font-size: 11px;
             color: #374151;
@@ -892,6 +1031,20 @@ def _html_with_svg(svg: str, title: str) -> str:
             max-width: 34vw;
             overflow: hidden;
             text-overflow: ellipsis;
+        }}
+        #inspector .node-ref {{
+            border: 0;
+            background: transparent;
+            padding: 0;
+            margin: 0;
+            color: #1f2937;
+            text-decoration: underline;
+            cursor: pointer;
+            font: inherit;
+            text-align: left;
+        }}
+        #inspector .node-ref:hover {{
+            color: #1d4ed8;
         }}
         .canvas {{
             width: 100vw;
@@ -947,9 +1100,14 @@ def _html_with_svg(svg: str, title: str) -> str:
             align-items: center;
             gap: 12px;
         }}
-        .dimmed {{
+        svg.focus-mode g.node,
+        svg.focus-mode g.edge {{
             opacity: 0.14;
-            transition: opacity 0.08s ease-out;
+            transition: opacity 0.06s linear;
+        }}
+        svg.focus-mode g.node.active,
+        svg.focus-mode g.edge.active {{
+            opacity: 1 !important;
         }}
         g.node.search-match > polygon,
         g.node.search-match > ellipse,
@@ -965,7 +1123,7 @@ def _html_with_svg(svg: str, title: str) -> str:
         }}
         g.edge.active > path {{
             stroke: #2563eb;
-            stroke-width: 2.4px;
+            stroke-width: 3.6px;
             opacity: 1;
         }}
         g.edge.active > polygon {{
@@ -973,9 +1131,83 @@ def _html_with_svg(svg: str, title: str) -> str:
             stroke: #2563eb;
             opacity: 1;
         }}
+        g.edge:not(.active) > path {{
+            stroke: #D9D9D9 !important;
+            stroke-width: 1.4px !important;
+            stroke-opacity: 1 !important;
+            opacity: 1 !important;
+        }}
+        g.edge:not(.active) > polygon {{
+            fill: #D9D9D9 !important;
+            stroke: #D9D9D9 !important;
+            fill-opacity: 1 !important;
+            stroke-opacity: 1 !important;
+            opacity: 1 !important;
+        }}
+        g.edge.active {{
+            opacity: 1 !important;
+        }}
+        g.edge.active > path {{
+            stroke: #2563eb !important;
+            stroke-width: 4.8px !important;
+            stroke-opacity: 1 !important;
+            opacity: 1 !important;
+        }}
+        g.edge.active > polygon {{
+            fill: #2563eb !important;
+            stroke: #2563eb !important;
+            fill-opacity: 1 !important;
+            stroke-opacity: 1 !important;
+            opacity: 1 !important;
+        }}
         g.cluster > path,
         g.cluster > polygon {{
             fill: none !important;
+        }}
+        g.cluster.cluster-dim > path,
+        g.cluster.cluster-dim > polygon {{
+            stroke: transparent !important;
+        }}
+        g.cluster.cluster-dim > text {{
+            fill: transparent !important;
+            stroke: transparent !important;
+        }}
+        g.cluster.cluster-active > path,
+        g.cluster.cluster-active > polygon {{
+            stroke: #000000 !important;
+        }}
+        svg.review-mode g.node.arch-hot > polygon,
+        svg.review-mode g.node.arch-hot > ellipse,
+        svg.review-mode g.node.arch-hot > rect {{
+            fill: #FECACA !important;
+            stroke: #B91C1C !important;
+            stroke-width: 2.8px !important;
+        }}
+        svg.review-mode g.node.arch-warm > polygon,
+        svg.review-mode g.node.arch-warm > ellipse,
+        svg.review-mode g.node.arch-warm > rect {{
+            fill: #FEF3C7 !important;
+            stroke: #B45309 !important;
+            stroke-width: 2.2px !important;
+        }}
+        svg.review-mode g.edge.arch-hot > path {{
+            stroke: #DC2626 !important;
+            stroke-width: 3.2px !important;
+        }}
+        svg.review-mode g.edge.arch-hot > polygon {{
+            fill: #DC2626 !important;
+            stroke: #DC2626 !important;
+        }}
+        svg.review-mode g.cluster.arch-hot > path,
+        svg.review-mode g.cluster.arch-hot > polygon {{
+            fill: #FECACA66 !important;
+            stroke: #B91C1C !important;
+            stroke-width: 2px !important;
+        }}
+        svg.review-mode g.cluster.arch-warm > path,
+        svg.review-mode g.cluster.arch-warm > polygon {{
+            fill: #FEF3C74D !important;
+            stroke: #B45309 !important;
         }}
     </style>
 </head>
@@ -986,6 +1218,8 @@ def _html_with_svg(svg: str, title: str) -> str:
         <button id="btn-reset-zoom" title="Reset zoom to 100% (0)">100%</button>
         <button id="btn-zoom-in" title="Zoom in (+)">+</button>
         <button id="btn-zoom-out" title="Zoom out (-)">-</button>
+        <button id="btn-chain" title="Show dependency chain (C)">Chain</button>
+        <button id="btn-arch-review" title="Highlight likely bottlenecks (A)">Architecture review</button>
         <button id="btn-clear-focus" title="Clear current pin/focus (Esc)">Clear focus</button>
         <input id="search" type="search" placeholder="Search module/path… (/)">
         <span class="badge" id="search-count">0 matches</span>
@@ -1009,6 +1243,7 @@ def _html_with_svg(svg: str, title: str) -> str:
         const searchInput = document.getElementById('search');
         const searchCount = document.getElementById('search-count');
         const repoBadge = document.getElementById('repo-badge');
+        const initialViewBox = svg?.getAttribute('viewBox') || '';
         let scale = 1;
         let originX = 0;
         let originY = 0;
@@ -1016,6 +1251,7 @@ def _html_with_svg(svg: str, title: str) -> str:
         let startX = 0;
         let startY = 0;
         let pinned = null;
+        let activeNodeName = null;
         let searchResults = [];
         let searchIndex = -1;
 
@@ -1030,11 +1266,38 @@ def _html_with_svg(svg: str, title: str) -> str:
             group?.querySelector('title')?.textContent?.trim() || '';
         const nodeGroups = [...svg.querySelectorAll('g.node')];
         const edgeGroups = [...svg.querySelectorAll('g.edge')];
+        const clusterGroups = [...svg.querySelectorAll('g.cluster')];
+        const clusterByKey = new Map();
         const nodeByName = new Map();
         const outgoing = new Map();
         const incoming = new Map();
+        const edgesByNode = new Map();
+        const edgesByPair = new Map();
+        const nodeClusterChain = new Map();
+        const nodeToDeepestClusterKey = new Map();
+        const nodeClusterKeysByDepth = new Map();
+        const clusterNodeNames = new Map();
+        const summaryClusterMembers = new Map();
         const repos = new Set();
         const packageRoots = new Set();
+        const activeNodes = new Set();
+        const activeEdges = new Set();
+        let hoverFrame = null;
+        let inspectorHoverName = null;
+        let lastFocusedNodeName = null;
+        let lastClickNodeName = null;
+        let lastClickAtMs = 0;
+        const DOUBLE_CLICK_MS = 320;
+        let reviewMode = false;
+        let reviewSummary = null;
+
+        clusterGroups.forEach((cluster) => {{
+            const raw = titleOf(cluster);
+            const key = raw.startsWith('cluster_') ? raw.slice(8) : raw;
+            cluster.dataset.clusterKey = key;
+            clusterByKey.set(key, cluster);
+            clusterNodeNames.set(key, []);
+        }});
 
         nodeGroups.forEach((node) => {{
             const name = titleOf(node);
@@ -1042,6 +1305,7 @@ def _html_with_svg(svg: str, title: str) -> str:
             nodeByName.set(name, node);
             outgoing.set(name, []);
             incoming.set(name, []);
+            edgesByNode.set(name, []);
             const topPackage = (name.split('.')[0] || '').trim();
             if (topPackage) packageRoots.add(topPackage);
             const path =
@@ -1051,6 +1315,29 @@ def _html_with_svg(svg: str, title: str) -> str:
             node.dataset.path = path;
             if (path.includes('/riskstudio-worker/')) repos.add('riskstudio-worker');
             if (path.includes('/riskstudio-sdk/')) repos.add('riskstudio-sdk');
+
+            const parts = name.split('/').filter(Boolean);
+            const clusterChain = [];
+            let prefix = '';
+            for (const part of parts.slice(0, -1)) {{
+                prefix = prefix ? `${{prefix}}/${{part}}` : part;
+                const cluster = clusterByKey.get(prefix);
+                if (cluster) clusterChain.push(cluster);
+            }}
+            nodeClusterChain.set(name, clusterChain);
+            const deepest = clusterChain.length
+                ? clusterChain[clusterChain.length - 1].dataset.clusterKey || ''
+                : '';
+            nodeToDeepestClusterKey.set(name, deepest);
+            if (deepest) (clusterNodeNames.get(deepest) || []).push(name);
+            const depthKeys = clusterChain.map((cluster) => cluster.dataset.clusterKey || '');
+            nodeClusterKeysByDepth.set(name, depthKeys);
+            depthKeys.forEach((summaryKey) => {{
+                if (!summaryKey) return;
+                const members = summaryClusterMembers.get(summaryKey) || [];
+                members.push(name);
+                summaryClusterMembers.set(summaryKey, members);
+            }});
         }});
 
         if (repos.size) {{
@@ -1069,8 +1356,133 @@ def _html_with_svg(svg: str, title: str) -> str:
             if (src && tgt) {{
                 outgoing.get(src)?.push(tgt);
                 incoming.get(tgt)?.push(src);
+                edgesByNode.get(src)?.push(edge);
+                edgesByNode.get(tgt)?.push(edge);
+                const key = `${{src}}\u0000${{tgt}}`;
+                const existing = edgesByPair.get(key) || [];
+                existing.push(edge);
+                edgesByPair.set(key, existing);
             }}
         }});
+
+        const _clusterBox = (clusterKey) => {{
+            const cluster = clusterByKey.get(clusterKey);
+            if (!cluster) return null;
+            const shape = cluster.querySelector('path, polygon');
+            const box = shape ? shape.getBBox() : cluster.getBBox();
+            if (box.width > 0 && box.height > 0) return box;
+            const members = summaryClusterMembers.get(clusterKey) || [];
+            if (!members.length) return null;
+            const node = nodeByName.get(members[0]);
+            if (!node) return null;
+            return node.getBBox();
+        }};
+
+        const _clusterCenter = (clusterKey) => {{
+            const box = _clusterBox(clusterKey);
+            if (!box) return null;
+            return _boxCenter(box);
+        }};
+
+        const _boxCenter = (box) => ({{
+            x: box.x + box.width / 2,
+            y: box.y + box.height / 2,
+        }});
+
+        const _boxBorderPoint = (box, toward) => {{
+            const center = _boxCenter(box);
+            let dx = toward.x - center.x;
+            let dy = toward.y - center.y;
+            if (Math.abs(dx) < 0.0001 && Math.abs(dy) < 0.0001) {{
+                dx = 1;
+                dy = 0;
+            }}
+            const halfW = Math.max(1, box.width / 2);
+            const halfH = Math.max(1, box.height / 2);
+            const tx = halfW / Math.max(0.0001, Math.abs(dx));
+            const ty = halfH / Math.max(0.0001, Math.abs(dy));
+            const t = Math.min(tx, ty);
+            return {{
+                x: center.x + dx * t,
+                y: center.y + dy * t,
+            }};
+        }};
+
+        const _percentileThreshold = (values, percentile, minimum) => {{
+            if (!values.length) return minimum;
+            const sorted = [...values].sort((a, b) => a - b);
+            const index = Math.max(0, Math.min(sorted.length - 1, Math.floor(sorted.length * percentile)));
+            return Math.max(minimum, sorted[index]);
+        }};
+
+        const _buildArchitectureReview = () => {{
+            const nodeStats = [...nodeByName.keys()].map((name) => {{
+                const inDegree = (incoming.get(name) || []).length;
+                const outDegree = (outgoing.get(name) || []).length;
+                const score = inDegree + outDegree + Math.sqrt(inDegree * outDegree);
+                return {{ name, inDegree, outDegree, score }};
+            }});
+            const nodeScores = nodeStats.map((item) => item.score);
+            const hotNodeThreshold = _percentileThreshold(nodeScores, 0.9, 4);
+            const warmNodeThreshold = _percentileThreshold(nodeScores, 0.75, 2.5);
+
+            nodeStats.forEach((item) => {{
+                const node = nodeByName.get(item.name);
+                if (!node) return;
+                if (item.score >= hotNodeThreshold) {{
+                    node.classList.add('arch-hot');
+                }} else if (item.score >= warmNodeThreshold) {{
+                    node.classList.add('arch-warm');
+                }}
+            }});
+
+            const edgeStats = edgeGroups.map((edge) => {{
+                const src = edge.dataset.src || '';
+                const tgt = edge.dataset.tgt || '';
+                const score = (outgoing.get(src) || []).length + (incoming.get(tgt) || []).length;
+                return {{ edge, src, tgt, score }};
+            }});
+            const edgeScores = edgeStats.map((item) => item.score);
+            const hotEdgeThreshold = _percentileThreshold(edgeScores, 0.9, 4);
+            edgeStats.forEach((item) => {{
+                if (item.score >= hotEdgeThreshold) item.edge.classList.add('arch-hot');
+            }});
+
+            const clusterScore = new Map();
+            clusterGroups.forEach((cluster) => clusterScore.set(cluster, 0));
+            nodeStats.forEach((item) => {{
+                const chain = nodeClusterChain.get(item.name) || [];
+                chain.forEach((cluster) => {{
+                    clusterScore.set(cluster, (clusterScore.get(cluster) || 0) + item.score);
+                }});
+            }});
+            const clusterValues = [...clusterScore.values()];
+            const hotClusterThreshold = _percentileThreshold(clusterValues, 0.9, 6);
+            const warmClusterThreshold = _percentileThreshold(clusterValues, 0.75, 3);
+            clusterScore.forEach((score, cluster) => {{
+                if (score >= hotClusterThreshold) {{
+                    cluster.classList.add('arch-hot');
+                }} else if (score >= warmClusterThreshold) {{
+                    cluster.classList.add('arch-warm');
+                }}
+            }});
+
+            const topNodes = [...nodeStats]
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 6)
+                .map((item) => item.name);
+            const topEdges = [...edgeStats]
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 6)
+                .map((item) => `${{item.src}} -> ${{item.tgt}}`);
+            const topClusters = [...clusterScore.entries()]
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 4)
+                .map(([cluster]) => cluster.dataset.clusterKey || titleOf(cluster));
+            return {{ topNodes, topEdges, topClusters, hotNodeThreshold, hotEdgeThreshold }};
+        }};
+
+        reviewSummary = _buildArchitectureReview();
 
         svg.querySelectorAll('a').forEach((link) => {{
             link.addEventListener('click', (event) => event.preventDefault());
@@ -1091,59 +1503,160 @@ def _html_with_svg(svg: str, title: str) -> str:
             if (!vb.width || !vb.height) return;
             const scaleX = canvas.clientWidth / vb.width;
             const scaleY = canvas.clientHeight / vb.height;
-            scale = Math.min(scaleX, scaleY) * 0.90;
+            scale = Math.min(scaleX, scaleY) * 0.84;
             originX = (canvas.clientWidth - vb.width * scale) / 2;
             originY = (canvas.clientHeight - vb.height * scale) / 2;
             applyTransform();
         }};
 
+        const _syncClassSet = (previous, next, className) => {{
+            previous.forEach((element) => {{
+                if (!next.has(element)) element.classList.remove(className);
+            }});
+            next.forEach((element) => {{
+                if (!previous.has(element)) element.classList.add(className);
+            }});
+            previous.clear();
+            next.forEach((element) => previous.add(element));
+        }};
+
+        const _applyFocus = (nextNodes, nextEdges) => {{
+            const hasFocus = nextNodes.size > 0 || nextEdges.size > 0;
+            svg.classList.toggle('focus-mode', hasFocus);
+            _syncClassSet(activeNodes, nextNodes, 'active');
+            _syncClassSet(activeEdges, nextEdges, 'active');
+        }};
+
+        const _clearFocusClasses = () => {{
+            svg.classList.remove('focus-mode');
+            _applyFocus(new Set(), new Set());
+        }};
+
+        const _scheduleHover = (callback) => {{
+            if (hoverFrame !== null) cancelAnimationFrame(hoverFrame);
+            hoverFrame = requestAnimationFrame(() => {{
+                hoverFrame = null;
+                callback();
+            }});
+        }};
+
+        const _nodeRefList = (items) =>
+            `<ul>${{items.map((item) =>
+                `<li><button type="button" class="node-ref" data-node-ref="${{esc(item)}}">${{esc(item)}}</button></li>`
+            ).join('')}}</ul>`;
+
+        const renderArchitectureReview = () => {{
+            if (!reviewSummary) return;
+            const nodeList = reviewSummary.topNodes.length
+                ? _nodeRefList(reviewSummary.topNodes)
+                : '<div class="muted">none</div>';
+            const edgeList = reviewSummary.topEdges.length
+                ? `<ul>${{reviewSummary.topEdges.map((edge) => `<li>${{esc(edge)}}</li>`).join('')}}</ul>`
+                : '<div class="muted">none</div>';
+            const clusterList = reviewSummary.topClusters.length
+                ? `<ul>${{reviewSummary.topClusters.map((cluster) => `<li>${{esc(cluster)}}</li>`).join('')}}</ul>`
+                : '<div class="muted">none</div>';
+            inspector.innerHTML = `
+                <h4>Architecture review</h4>
+                <div class="muted">Heuristics: node centrality and edge fan-in/fan-out hotspots.</div>
+                <div><strong>Hot modules</strong> (red)</div>
+                ${{nodeList}}
+                <div><strong>Hot dependencies</strong> (red edges)</div>
+                ${{edgeList}}
+                <div><strong>Hot clusters</strong> (cluster tint)</div>
+                ${{clusterList}}
+                <div><strong>Improvement ideas</strong></div>
+                <ul>
+                    <li>Split top hot modules by ownership boundary to reduce coupling.</li>
+                    <li>Replace high-traffic direct dependencies with ports/adapters or events.</li>
+                    <li>Move heavy integration code from core clusters into edge adapters.</li>
+                </ul>
+            `;
+        }};
+
         const clearFocus = (force = false) => {{
             if (pinned && !force) return;
-            nodeGroups.forEach((n) => n.classList.remove('dimmed', 'active'));
-            edgeGroups.forEach((e) => e.classList.remove('dimmed', 'active'));
+            _clearFocusClasses();
+            clusterGroups.forEach((c) => c.classList.remove('cluster-dim', 'cluster-active'));
+            activeNodeName = null;
+            inspectorHoverName = null;
+            if (reviewMode) {{
+                renderArchitectureReview();
+                return;
+            }}
             inspector.innerHTML =
                 '<h4>Context</h4>' +
                 '<div class="muted">Click a node or edge to pin details.</div>';
         }};
 
-        const markNodeActive = (name) => {{
-            const n = nodeByName.get(name);
-            if (n) {{
-                n.classList.remove('dimmed');
-                n.classList.add('active');
+        const focusNodeClusters = (name) => {{
+            const activeClusters = new Set(nodeClusterChain.get(name) || []);
+            if (!activeClusters.size) {{
+                clusterGroups.forEach((cluster) => {{
+                    cluster.classList.remove('cluster-dim', 'cluster-active');
+                }});
+                return;
             }}
+            clusterGroups.forEach((cluster) => {{
+                cluster.classList.add('cluster-dim');
+                cluster.classList.remove('cluster-active');
+            }});
+            activeClusters.forEach((cluster) => {{
+                cluster.classList.remove('cluster-dim');
+                cluster.classList.add('cluster-active');
+            }});
         }};
 
-        const focusNode = (name, isPinned = false) => {{
+        const focusNodeClustersForNames = (names) => {{
+            const activeClusters = new Set();
+            names.forEach((name) => {{
+                (nodeClusterChain.get(name) || []).forEach((cluster) => {{
+                    activeClusters.add(cluster);
+                }});
+            }});
+            if (!activeClusters.size) {{
+                clusterGroups.forEach((cluster) => {{
+                    cluster.classList.remove('cluster-dim', 'cluster-active');
+                }});
+                return;
+            }}
+            clusterGroups.forEach((cluster) => {{
+                cluster.classList.add('cluster-dim');
+                cluster.classList.remove('cluster-active');
+            }});
+            activeClusters.forEach((cluster) => {{
+                cluster.classList.remove('cluster-dim');
+                cluster.classList.add('cluster-active');
+            }});
+        }};
+
+        const _collectNodeElements = (names) => {{
+            const result = new Set();
+            names.forEach((name) => {{
+                const node = nodeByName.get(name);
+                if (node) result.add(node);
+            }});
+            return result;
+        }};
+
+        const focusNode = (name, isPinned = false, updateInspector = true) => {{
+            activeNodeName = name;
+            lastFocusedNodeName = name;
             const out = outgoing.get(name) || [];
             const inc = incoming.get(name) || [];
             const neighbors = new Set([name, ...out, ...inc]);
+            const nextNodes = _collectNodeElements(neighbors);
+            const nextEdges = new Set(edgesByNode.get(name) || []);
+            _applyFocus(nextNodes, nextEdges);
+            focusNodeClusters(name);
 
-            nodeGroups.forEach((n) => {{
-                n.classList.add('dimmed');
-                n.classList.remove('active');
-            }});
-            edgeGroups.forEach((e) => {{
-                e.classList.add('dimmed');
-                e.classList.remove('active');
-            }});
-
-            neighbors.forEach(markNodeActive);
-
-            edgeGroups.forEach((edge) => {{
-                const src = edge.dataset.src;
-                const tgt = edge.dataset.tgt;
-                if (src === name || tgt === name) {{
-                    edge.classList.remove('dimmed');
-                    edge.classList.add('active');
-                }}
-            }});
+            if (!updateInspector) return;
 
             const outList = out.length
-                ? `<ul>${{out.map((n) => `<li>${{esc(n)}}</li>`).join('')}}</ul>`
+                ? _nodeRefList(out)
                 : '<div class="muted">none</div>';
             const inList = inc.length
-                ? `<ul>${{inc.map((n) => `<li>${{esc(n)}}</li>`).join('')}}</ul>`
+                ? _nodeRefList(inc)
                 : '<div class="muted">none</div>';
             const pinBadge = isPinned
                 ? '<div class="muted"><strong>Pinned</strong> · click empty space or press Esc to release</div>'
@@ -1159,25 +1672,76 @@ def _html_with_svg(svg: str, title: str) -> str:
             `;
         }};
 
-        const focusEdge = (src, tgt, isPinned = false) => {{
-            nodeGroups.forEach((n) => {{
-                n.classList.add('dimmed');
-                n.classList.remove('active');
-            }});
-            edgeGroups.forEach((e) => {{
-                e.classList.add('dimmed');
-                e.classList.remove('active');
-            }});
+        const _collectTransitive = (seed, adjacency) => {{
+            const visited = new Set([seed]);
+            const queue = [seed];
+            while (queue.length) {{
+                const node = queue.shift();
+                const next = adjacency.get(node) || [];
+                next.forEach((candidate) => {{
+                    if (visited.has(candidate)) return;
+                    visited.add(candidate);
+                    queue.push(candidate);
+                }});
+            }}
+            return visited;
+        }};
 
-            markNodeActive(src);
-            markNodeActive(tgt);
-
+        const focusNodeTransitive = (name, isPinned = false, updateInspector = true) => {{
+            activeNodeName = name;
+            lastFocusedNodeName = name;
+            const descendants = _collectTransitive(name, outgoing);
+            const ancestors = _collectTransitive(name, incoming);
+            const activeNames = new Set([...descendants, ...ancestors]);
+            const nextNodes = _collectNodeElements(activeNames);
+            const nextEdges = new Set();
             edgeGroups.forEach((edge) => {{
-                if (edge.dataset.src === src && edge.dataset.tgt === tgt) {{
-                    edge.classList.remove('dimmed');
-                    edge.classList.add('active');
+                const src = edge.dataset.src;
+                const tgt = edge.dataset.tgt;
+                if (activeNames.has(src) && activeNames.has(tgt)) {{
+                    nextEdges.add(edge);
                 }}
             }});
+            _applyFocus(nextNodes, nextEdges);
+            focusNodeClustersForNames(activeNames);
+
+            if (!updateInspector) return;
+            const pinBadge = isPinned
+                ? '<div class="muted"><strong>Pinned</strong> · transitief (parents + children, recursief)</div>'
+                : '';
+            inspector.innerHTML = `
+                <h4>${{esc(name)}}</h4>
+                ${{pinBadge}}
+                <div><strong>Transitive context</strong></div>
+                <div>Nodes: ${{activeNames.size}}</div>
+                <div>Ancestors: ${{Math.max(0, ancestors.size - 1)}}</div>
+                <div>Descendants: ${{Math.max(0, descendants.size - 1)}}</div>
+            `;
+        }};
+
+        const restorePinnedView = () => {{
+            if (!pinned) {{
+                clearFocus(true);
+                return;
+            }}
+            if (pinned.kind === 'node') {{
+                focusNode(pinned.name, true);
+                return;
+            }}
+            if (pinned.kind === 'node-transitive') {{
+                focusNodeTransitive(pinned.name, true);
+                return;
+            }}
+            focusEdge(pinned.src, pinned.tgt, true);
+        }};
+
+        const focusEdge = (src, tgt, isPinned = false) => {{
+            activeNodeName = null;
+            const nextNodes = _collectNodeElements(new Set([src, tgt]));
+            const key = `${{src}}\u0000${{tgt}}`;
+            const nextEdges = new Set(edgesByPair.get(key) || []);
+            _applyFocus(nextNodes, nextEdges);
+            clusterGroups.forEach((c) => c.classList.remove('cluster-dim', 'cluster-active'));
 
             const pinBadge = isPinned
                 ? '<div class="muted"><strong>Pinned</strong> · click empty space or press Esc to release</div>'
@@ -1189,6 +1753,27 @@ def _html_with_svg(svg: str, title: str) -> str:
                 <div><strong>From:</strong> ${{esc(src)}}</div>
                 <div><strong>To:</strong> ${{esc(tgt)}}</div>
             `;
+        }};
+
+        const triggerDependencyChain = () => {{
+            const chainName = pinned?.kind === 'node' || pinned?.kind === 'node-transitive'
+                ? pinned.name
+                : (activeNodeName || lastFocusedNodeName);
+            if (!chainName) return;
+            pinned = {{ kind: 'node-transitive', name: chainName }};
+            focusNodeTransitive(chainName, true);
+        }};
+
+        const setArchitectureReviewMode = (enabled) => {{
+            reviewMode = enabled;
+            svg.classList.toggle('review-mode', reviewMode);
+            const reviewButton = document.getElementById('btn-arch-review');
+            reviewButton.classList.toggle('toggled', reviewMode);
+            if (reviewMode) {{
+                renderArchitectureReview();
+                return;
+            }}
+            restorePinnedView();
         }};
 
         const clearSearchStyles = () => {{
@@ -1235,14 +1820,30 @@ def _html_with_svg(svg: str, title: str) -> str:
             const name = node.dataset.name;
             node.addEventListener('mouseenter', () => {{
                 if (pinned) return;
-                focusNode(name);
+                _scheduleHover(() => focusNode(name));
             }});
-            node.addEventListener('mouseleave', () => clearFocus());
+            node.addEventListener('mouseleave', () => _scheduleHover(() => clearFocus()));
             node.addEventListener('click', (event) => {{
                 event.preventDefault();
                 event.stopPropagation();
+                const nowMs = Date.now();
+                const isRapidSecondClick =
+                    lastClickNodeName === name && (nowMs - lastClickAtMs) <= DOUBLE_CLICK_MS;
+                lastClickNodeName = name;
+                lastClickAtMs = nowMs;
+                if (isRapidSecondClick) {{
+                    pinned = {{ kind: 'node-transitive', name }};
+                    focusNodeTransitive(name, true);
+                    return;
+                }}
                 pinned = {{ kind: 'node', name }};
                 focusNode(name, true);
+            }});
+            node.addEventListener('dblclick', (event) => {{
+                event.preventDefault();
+                event.stopPropagation();
+                pinned = {{ kind: 'node-transitive', name }};
+                focusNodeTransitive(name, true);
             }});
         }});
 
@@ -1252,15 +1853,48 @@ def _html_with_svg(svg: str, title: str) -> str:
             if (!src || !tgt) return;
             edge.addEventListener('mouseenter', () => {{
                 if (pinned) return;
-                focusEdge(src, tgt);
+                _scheduleHover(() => focusEdge(src, tgt));
             }});
-            edge.addEventListener('mouseleave', () => clearFocus());
+            edge.addEventListener('mouseleave', () => _scheduleHover(() => clearFocus()));
             edge.addEventListener('click', (event) => {{
                 event.preventDefault();
                 event.stopPropagation();
                 pinned = {{ kind: 'edge', src, tgt }};
                 focusEdge(src, tgt, true);
             }});
+        }});
+
+        inspector.addEventListener('click', (event) => {{
+            const target = event.target instanceof Element ? event.target : null;
+            const nodeRef = target ? target.closest('[data-node-ref]') : null;
+            if (!nodeRef) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const name = nodeRef.getAttribute('data-node-ref') || '';
+            if (!name) return;
+            pinned = {{ kind: 'node', name }};
+            focusNode(name, true);
+        }});
+
+        inspector.addEventListener('mouseover', (event) => {{
+            const target = event.target instanceof Element ? event.target : null;
+            const nodeRef = target ? target.closest('[data-node-ref]') : null;
+            if (!nodeRef) return;
+            const name = nodeRef.getAttribute('data-node-ref') || '';
+            if (!name) return;
+            if (name === inspectorHoverName) return;
+            inspectorHoverName = name;
+            _scheduleHover(() => focusNode(name, false, false));
+        }});
+
+        inspector.addEventListener('mouseout', (event) => {{
+            const target = event.target instanceof Element ? event.target : null;
+            const nodeRef = target ? target.closest('[data-node-ref]') : null;
+            if (!nodeRef) return;
+            const related = event.relatedTarget;
+            if (related instanceof Node && nodeRef.contains(related)) return;
+            inspectorHoverName = null;
+            _scheduleHover(() => restorePinnedView());
         }});
 
         canvas.addEventListener('click', (event) => {{
@@ -1279,6 +1913,21 @@ def _html_with_svg(svg: str, title: str) -> str:
                 event.preventDefault();
                 searchInput.focus();
                 searchInput.select();
+                return;
+            }}
+            const typingTarget = event.target;
+            const isTyping =
+                typingTarget instanceof HTMLInputElement ||
+                typingTarget instanceof HTMLTextAreaElement ||
+                (typingTarget instanceof HTMLElement && typingTarget.isContentEditable);
+            if (!isTyping && (event.key === 'a' || event.key === 'A')) {{
+                event.preventDefault();
+                setArchitectureReviewMode(!reviewMode);
+                return;
+            }}
+            if (!isTyping && (event.key === 'c' || event.key === 'C')) {{
+                event.preventDefault();
+                triggerDependencyChain();
                 return;
             }}
             if (event.key === 'f' || event.key === 'F') {{
@@ -1346,6 +1995,12 @@ def _html_with_svg(svg: str, title: str) -> str:
         document.getElementById('btn-zoom-out').addEventListener('click', () => {{
             scale = Math.max(0.2, scale - 0.1);
             applyTransform();
+        }});
+        document.getElementById('btn-chain').addEventListener('click', () => {{
+            triggerDependencyChain();
+        }});
+        document.getElementById('btn-arch-review').addEventListener('click', () => {{
+            setArchitectureReviewMode(!reviewMode);
         }});
         document.getElementById('btn-clear-focus').addEventListener('click', () => {{
             pinned = null;

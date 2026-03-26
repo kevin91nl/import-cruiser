@@ -156,33 +156,20 @@ def filter_graph(
     root_path = _common_root(graph.modules)
     allowed = set(module_map.keys())
 
-    if include_patterns:
-        allowed = {name for name in allowed if _matches_any(name, include_patterns)}
-
-    if exclude_patterns:
-        allowed = {name for name in allowed if not _matches_any(name, exclude_patterns)}
-
-    if include_path_patterns:
-        allowed = {
-            name
-            for name in allowed
-            if _matches_path_filters(
-                module_map[name].path,
-                root_path,
-                include_path_patterns,
-            )
-        }
-
-    if exclude_path_patterns:
-        allowed = {
-            name
-            for name in allowed
-            if not _matches_path_filters(
-                module_map[name].path,
-                root_path,
-                exclude_path_patterns,
-            )
-        }
+    allowed = _apply_name_filters(allowed, include_patterns, exclude_patterns)
+    allowed = _apply_include_path_filters(
+        graph,
+        module_map,
+        allowed,
+        root_path,
+        include_path_patterns,
+    )
+    allowed = _apply_exclude_path_filters(
+        module_map,
+        allowed,
+        root_path,
+        exclude_path_patterns,
+    )
 
     if focus_patterns:
         focus_set = {name for name in allowed if _matches_any(name, focus_patterns)}
@@ -225,6 +212,18 @@ def prune_orphan_init_modules(graph: DependencyGraph) -> DependencyGraph:
         for name, module in module_map.items()
         if Path(module.path).name != "__init__.py" or name in connected
     }
+    return _subgraph(graph, module_map, allowed)
+
+
+def prune_isolated_modules(graph: DependencyGraph) -> DependencyGraph:
+    """Remove modules that have no incoming or outgoing edges."""
+    module_map = {m.name: m for m in graph.modules}
+    connected: set[str] = set()
+    for dep in graph.dependencies:
+        connected.add(dep.source)
+        connected.add(dep.target)
+
+    allowed = {name for name in module_map if name in connected}
     return _subgraph(graph, module_map, allowed)
 
 
@@ -300,6 +299,73 @@ def _matches_path_filters(
     rel_path = _match_path(path, root_path)
     abs_path = path.replace("\\", "/")
     return _matches_any(rel_path, patterns) or _matches_any(abs_path, patterns)
+
+
+def _apply_name_filters(
+    allowed: set[str],
+    include_patterns: list[re.Pattern[str]],
+    exclude_patterns: list[re.Pattern[str]],
+) -> set[str]:
+    filtered = allowed
+    if include_patterns:
+        filtered = {name for name in filtered if _matches_any(name, include_patterns)}
+    if exclude_patterns:
+        filtered = {
+            name for name in filtered if not _matches_any(name, exclude_patterns)
+        }
+    return filtered
+
+
+def _apply_include_path_filters(
+    graph: DependencyGraph,
+    module_map: dict[str, Module],
+    allowed: set[str],
+    root_path: str | None,
+    include_path_patterns: list[re.Pattern[str]],
+) -> set[str]:
+    if not include_path_patterns:
+        return allowed
+    allowed_with_path = {
+        name
+        for name in allowed
+        if module_map[name].path
+        and _matches_path_filters(
+            module_map[name].path,
+            root_path,
+            include_path_patterns,
+        )
+    }
+    pathless = {name for name in allowed if not module_map[name].path}
+    connected_pathless = {
+        dep.target
+        for dep in graph.dependencies
+        if dep.source in allowed_with_path and dep.target in pathless
+    }
+    connected_pathless.update(
+        dep.source
+        for dep in graph.dependencies
+        if dep.target in allowed_with_path and dep.source in pathless
+    )
+    return allowed_with_path | connected_pathless
+
+
+def _apply_exclude_path_filters(
+    module_map: dict[str, Module],
+    allowed: set[str],
+    root_path: str | None,
+    exclude_path_patterns: list[re.Pattern[str]],
+) -> set[str]:
+    if not exclude_path_patterns:
+        return allowed
+    return {
+        name
+        for name in allowed
+        if not _matches_path_filters(
+            module_map[name].path,
+            root_path,
+            exclude_path_patterns,
+        )
+    }
 
 
 def _expand_focus(

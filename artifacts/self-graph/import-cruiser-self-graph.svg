@@ -40,8 +40,8 @@
 <!-- src/import_cruiser/analyzer.py&#45;&gt;src/import_cruiser/graph.py -->
 <g id="edge1" class="edge">
 <title>src/import_cruiser/analyzer.py&#45;&gt;src/import_cruiser/graph.py</title>
-<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M153.15,-111.67C155.02,-111.08 156.91,-110.48 158.79,-109.89"/>
-<polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="159.01,-112.02 164.1,-108.21 157.75,-108.02 159.01,-112.02"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M153.15,-111.67C155.02,-111.08 156.91,-110.48 158.79,-109.89"/>
+<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="159.01,-112.02 164.1,-108.21 157.75,-108.02 159.01,-112.02"/>
 </g>
 <!-- src/import_cruiser/cli.py -->
 <g id="node2" class="node">
@@ -55,8 +55,8 @@
 <!-- src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/analyzer.py -->
 <g id="edge2" class="edge">
 <title>src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/analyzer.py</title>
-<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M65.59,-86.34C73.03,-91.38 82.45,-97.64 91,-103 93.16,-104.35 95.41,-105.73 97.68,-107.1"/>
-<polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="96.48,-108.83 102.71,-110.09 98.63,-105.22 96.48,-108.83"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M65.59,-86.34C73.03,-91.38 82.45,-97.64 91,-103 93.16,-104.35 95.41,-105.73 97.68,-107.1"/>
+<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="96.48,-108.83 102.71,-110.09 98.63,-105.22 96.48,-108.83"/>
 </g>
 <!-- src/import_cruiser/config.py -->
 <g id="node3" class="node">
@@ -70,8 +70,8 @@
 <!-- src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/config.py -->
 <g id="edge3" class="edge">
 <title>src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/config.py</title>
-<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M56.83,-67.65C63.06,-56.75 75.01,-39.3 91,-32 111.88,-22.46 137.66,-24.56 158.11,-28.99"/>
-<polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="157.54,-31.02 163.87,-30.38 158.52,-26.93 157.54,-31.02"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M56.83,-67.65C63.06,-56.75 75.01,-39.3 91,-32 111.88,-22.46 137.66,-24.56 158.11,-28.99"/>
+<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="157.54,-31.02 163.87,-30.38 158.52,-26.93 157.54,-31.02"/>
 </g>
 <!-- src/import_cruiser/exporter.py -->
 <g id="node5" class="node">
@@ -85,14 +85,14 @@
 <!-- src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/exporter.py -->
 <g id="edge4" class="edge">
 <title>src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/exporter.py</title>
-<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M78.32,-77C79.8,-77 81.31,-77 82.82,-77"/>
-<polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="82.5,-79.1 88.5,-77 82.5,-74.9 82.5,-79.1"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M78.32,-77C79.8,-77 81.31,-77 82.82,-77"/>
+<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="82.5,-79.1 88.5,-77 82.5,-74.9 82.5,-79.1"/>
 </g>
 <!-- src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/graph.py -->
 <g id="edge5" class="edge">
 <title>src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/graph.py</title>
-<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M72.69,-86.28C78.51,-88.52 84.91,-90.65 91,-92 112.9,-96.85 138.02,-98.62 157.88,-99.17"/>
-<polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="157.82,-101.26 163.86,-99.28 157.9,-97.07 157.82,-101.26"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M72.69,-86.28C78.51,-88.52 84.91,-90.65 91,-92 112.9,-96.85 138.02,-98.62 157.88,-99.17"/>
+<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="157.82,-101.26 163.86,-99.28 157.9,-97.07 157.82,-101.26"/>
 </g>
 <!-- src/import_cruiser/validator.py -->
 <g id="node7" class="node">
@@ -106,8 +106,8 @@
 <!-- src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/validator.py -->
 <g id="edge6" class="edge">
 <title>src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/validator.py</title>
-<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M73.65,-67.67C79.47,-65.17 85.86,-62.41 92.03,-59.75"/>
-<polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="92.77,-61.72 97.45,-57.42 91.11,-57.86 92.77,-61.72"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M73.65,-67.67C79.47,-65.17 85.86,-62.41 92.03,-59.75"/>
+<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="92.77,-61.72 97.45,-57.42 91.11,-57.86 92.77,-61.72"/>
 </g>
 <!-- src/import_cruiser/detector.py -->
 <g id="node4" class="node">
@@ -121,26 +121,26 @@
 <!-- src/import_cruiser/detector.py&#45;&gt;src/import_cruiser/graph.py -->
 <g id="edge7" class="edge">
 <title>src/import_cruiser/detector.py&#45;&gt;src/import_cruiser/graph.py</title>
-<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M144.86,-141.65C148.1,-139.93 151.33,-138.03 154.25,-136 163.17,-129.8 172.04,-121.59 179.06,-114.48"/>
-<polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="180.21,-116.32 182.84,-110.54 177.18,-113.41 180.21,-116.32"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M144.86,-141.65C148.1,-139.93 151.33,-138.03 154.25,-136 163.17,-129.8 172.04,-121.59 179.06,-114.48"/>
+<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="180.21,-116.32 182.84,-110.54 177.18,-113.41 180.21,-116.32"/>
 </g>
 <!-- src/import_cruiser/exporter.py&#45;&gt;src/import_cruiser/graph.py -->
 <g id="edge8" class="edge">
 <title>src/import_cruiser/exporter.py&#45;&gt;src/import_cruiser/graph.py</title>
-<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M153.15,-86.33C155.02,-86.92 156.91,-87.52 158.79,-88.11"/>
-<polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="157.75,-89.98 164.1,-89.79 159.01,-85.98 157.75,-89.98"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M153.15,-86.33C155.02,-86.92 156.91,-87.52 158.79,-88.11"/>
+<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="157.75,-89.98 164.1,-89.79 159.01,-85.98 157.75,-89.98"/>
 </g>
 <!-- src/import_cruiser/validator.py&#45;&gt;src/import_cruiser/config.py -->
 <g id="edge9" class="edge">
 <title>src/import_cruiser/validator.py&#45;&gt;src/import_cruiser/config.py</title>
-<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M154.37,-43.91C155.69,-43.78 157.02,-43.64 158.34,-43.51"/>
-<polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="158.26,-45.63 164.02,-42.94 157.84,-41.45 158.26,-45.63"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M154.37,-43.91C155.69,-43.78 157.02,-43.64 158.34,-43.51"/>
+<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="158.26,-45.63 164.02,-42.94 157.84,-41.45 158.26,-45.63"/>
 </g>
 <!-- src/import_cruiser/validator.py&#45;&gt;src/import_cruiser/graph.py -->
 <g id="edge10" class="edge">
 <title>src/import_cruiser/validator.py&#45;&gt;src/import_cruiser/graph.py</title>
-<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M144.86,-56.35C148.1,-58.07 151.33,-59.97 154.25,-62 163.17,-68.2 172.04,-76.41 179.06,-83.52"/>
-<polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="177.18,-84.59 182.84,-87.46 180.21,-81.68 177.18,-84.59"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M144.86,-56.35C148.1,-58.07 151.33,-59.97 154.25,-62 163.17,-68.2 172.04,-76.41 179.06,-83.52"/>
+<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="177.18,-84.59 182.84,-87.46 180.21,-81.68 177.18,-84.59"/>
 </g>
 </g>
 </svg>

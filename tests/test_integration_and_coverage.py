@@ -217,6 +217,7 @@ def test_apply_graph_options_archi_and_auto_cluster() -> None:
             rankdir="LR",
             style="archi",
             edge_mode="auto",
+            prune_isolated=False,
         )
     )
 
@@ -226,6 +227,41 @@ def test_apply_graph_options_archi_and_auto_cluster() -> None:
     assert style == "archi"
     assert cluster_depth == 20
     assert edge_mode == "cluster"
+
+
+def test_apply_graph_options_prune_isolated_enabled() -> None:
+    graph = DependencyGraph()
+    base = Path(__file__).resolve().parents[1]
+    graph.add_module(Module(name="pkg.a", path=str(base / "src" / "pkg" / "a.py")))
+    graph.add_module(Module(name="pkg.b", path=str(base / "src" / "pkg" / "b.py")))
+    graph.add_module(
+        Module(name="pkg.isolated", path=str(base / "src" / "pkg" / "isolated.py"))
+    )
+    graph.add_dependency(Dependency(source="pkg.a", target="pkg.b", line=1))
+
+    filtered, *_ = cli._apply_graph_options(
+        graph,
+        include=[],
+        exclude=[],
+        include_paths=[],
+        exclude_paths=[],
+        focus=[],
+        focus_depth=1,
+        collapse_depth=0,
+        cluster_depth=0,
+        cluster_mode="module",
+        aggregate_depth=0,
+        leaf_patterns=[],
+        layout="dot",
+        rankdir="LR",
+        style="depcruise",
+        edge_mode="auto",
+        prune_isolated=True,
+    )
+
+    names = {module.name for module in filtered.modules}
+    assert "pkg.isolated" not in names
+    assert {"pkg.a", "pkg.b"} <= names
 
 
 def test_run_module_main_guard(monkeypatch: pytest.MonkeyPatch) -> None:

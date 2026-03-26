@@ -8,8 +8,12 @@ from pathlib import Path
 
 from import_cruiser.analyzer import Analyzer
 from import_cruiser.exporter import (
+    _common_prefix,
     _depcruise_cluster_line,
     _depcruise_node_id,
+    _external_anchor_parts,
+    _is_http_external_node,
+    _module_parent_parts,
     export_dot,
     export_json,
 )
@@ -99,6 +103,7 @@ class TestExportDot:
         assert 'splines="true"' in result
         assert 'fillcolor="#ffffff"' in result
         assert 'fillcolor="#ffffcc"' in result
+        assert 'color="#0000001f"' in result
 
     def test_empty_graph(self) -> None:
         result = export_dot(DependencyGraph())
@@ -187,6 +192,63 @@ class TestExportDot:
         assert '"b"' in result
         assert '"a" -> "b"' in result
 
+    def test_depcruise_external_node_styling(self) -> None:
+        graph = DependencyGraph()
+        graph.add_module(Module(name="pkg.service", path="pkg/service.py"))
+        graph.add_module(Module(name="sqlalchemy", path=""))
+        graph.add_module(Module(name="api.shodan.io", path=""))
+        graph.add_dependency(
+            Dependency(source="pkg.service", target="sqlalchemy", line=1)
+        )
+        graph.add_dependency(
+            Dependency(source="pkg.service", target="api.shodan.io", line=2)
+        )
+
+        result = export_dot(graph, style="depcruise")
+        assert 'shape="cylinder"' in result
+        assert 'fillcolor="#FFE7CC"' in result
+        assert 'shape="box" style="rounded,filled,dashed"' in result
+        assert 'fillcolor="#DBEAFE"' in result
+        assert (
+            '"api.shodan.io" [color="#1D4ED8", style="dashed", '
+            "penwidth=1.4, arrowsize=0.7]" in result
+        )
+
+    def test_depcruise_external_nodes_anchor_to_deepest_usage_level(
+        self, tmp_path: Path
+    ) -> None:
+        pkg = tmp_path / "src" / "pkg" / "adapters" / "http"
+        pkg.mkdir(parents=True)
+        module_path = pkg / "client.py"
+        module_path.write_text("x = 1\n")
+        sibling_path = tmp_path / "src" / "pkg" / "core.py"
+        sibling_path.parent.mkdir(parents=True, exist_ok=True)
+        sibling_path.write_text("x = 1\n")
+
+        graph = DependencyGraph()
+        graph.add_module(Module(name="pkg.adapters.http.client", path=str(module_path)))
+        graph.add_module(Module(name="pkg.core", path=str(sibling_path)))
+        graph.add_module(Module(name="sqlalchemy", path=""))
+        graph.add_module(Module(name="api.shodan.io", path=""))
+        graph.add_dependency(
+            Dependency(
+                source="pkg.adapters.http.client",
+                target="sqlalchemy",
+                line=1,
+            )
+        )
+        graph.add_dependency(
+            Dependency(
+                source="pkg.adapters.http.client",
+                target="api.shodan.io",
+                line=2,
+            )
+        )
+
+        result = export_dot(graph, style="depcruise")
+        assert '"src/pkg/adapters/http/sqlalchemy"' in result
+        assert '"src/pkg/adapters/http/api.shodan.io"' in result
+
     def test_depcruise_helpers_fallback_on_invalid_root(self) -> None:
         module = Module(name="pkg.mod", path="a.py")
         node_id = _depcruise_node_id(module, "/not-a-root")
@@ -202,3 +264,32 @@ class TestExportDot:
         node_id = _depcruise_node_id(module, str(tmp_path / "root"))
         line = _depcruise_cluster_line(module, node_id, str(tmp_path / "root"))
         assert line.count("{") == line.count("}")
+
+    def test_http_external_node_rejects_url_like_names(self) -> None:
+        assert not _is_http_external_node("https://example.com", "")
+        assert not _is_http_external_node("api/shodan.io", "")
+        assert not _is_http_external_node("localhost", "")
+
+    def test_external_anchor_parts_skips_invalid_dependency_pairs(self) -> None:
+        graph = DependencyGraph()
+        graph.add_module(Module(name="pkg.service", path="/tmp/pkg/service.py"))
+        graph.add_module(Module(name="api.shodan.io", path=""))
+        graph.add_module(Module(name="pathless.source", path=""))
+        graph.add_dependency(
+            Dependency(source="pkg.service", target="missing.target", line=1)
+        )
+        graph.add_dependency(
+            Dependency(source="missing.source", target="api.shodan.io", line=2)
+        )
+        graph.add_dependency(
+            Dependency(source="pathless.source", target="api.shodan.io", line=3)
+        )
+
+        anchors = _external_anchor_parts(graph, None)
+        assert anchors == {}
+
+    def test_module_parent_parts_and_common_prefix_edge_cases(self) -> None:
+        parts = _module_parent_parts("/tmp/project/pkg/service.py", "/tmp/other-root")
+        assert parts
+        assert _common_prefix([]) == []
+        assert _common_prefix([["a", "b"], ["a", "c"], ["x"]]) == []

@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import os
 import re
+from urllib.parse import urlsplit
 import warnings
 from pathlib import Path
 
@@ -129,6 +130,8 @@ class Analyzer:
         normalize_hyphens: bool = True,
         include_paths: list[str] | None = None,
         exclude_paths: list[str] | None = None,
+        include_external_patterns: list[str] | None = None,
+        include_http_hosts: bool = False,
     ) -> None:
         # Keep the user-provided path form (e.g. /private/tmp vs /tmp) so
         # include/exclude path regexes match what users pass on the CLI.
@@ -136,6 +139,10 @@ class Analyzer:
         self.normalize_hyphens = normalize_hyphens
         self.include_paths = [re.compile(p) for p in include_paths or []]
         self.exclude_paths = [re.compile(p) for p in exclude_paths or []]
+        self.include_external_patterns = [
+            re.compile(p) for p in include_external_patterns or []
+        ]
+        self.include_http_hosts = include_http_hosts
 
     def analyze(self) -> DependencyGraph:
         """Walk the project directory and return a populated graph."""
@@ -172,6 +179,28 @@ class Analyzer:
                     graph.add_dependency(
                         Dependency(source=mod_name, target=target, line=lineno)
                     )
+                    continue
+
+                external = _resolve_external(
+                    imported,
+                    self.include_external_patterns,
+                )
+                if external is None:
+                    continue
+                if graph.get_module(external) is None:
+                    graph.add_module(Module(name=external, path=""))
+                graph.add_dependency(
+                    Dependency(source=mod_name, target=external, line=lineno)
+                )
+
+            if not self.include_http_hosts:
+                continue
+            for host, lineno in _collect_http_hosts(source):
+                if graph.get_module(host) is None:
+                    graph.add_module(Module(name=host, path=""))
+                graph.add_dependency(
+                    Dependency(source=mod_name, target=host, line=lineno)
+                )
 
         return graph
 
@@ -190,6 +219,154 @@ def _resolve_internal(imported: str, known_modules: set[str]) -> str | None:
         if candidate in known_modules:
             return candidate
     return None
+
+
+def _resolve_external(
+    imported: str,
+    patterns: list[re.Pattern[str]],
+) -> str | None:
+    if not patterns:
+        return None
+    if not any(pattern.search(imported) for pattern in patterns):
+        return None
+    return imported.split(".", 1)[0]
+
+
+def _collect_http_hosts(source: str) -> list[tuple[str, int]]:
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", SyntaxWarning)
+            tree = ast.parse(source)
+    except SyntaxError:
+        return []
+
+    collector = _HttpHostCollector()
+    collector.visit(tree)
+    return collector.hosts
+
+
+class _HttpHostCollector(ast.NodeVisitor):
+    def __init__(self) -> None:
+        self.hosts: list[tuple[str, int]] = []
+        self._scopes: list[dict[str, str]] = [{}]
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        host = _http_host_from_expr(node.value, self._scopes)
+        if host:
+            for target in node.targets:
+                self._bind_target(target, host)
+                if _is_url_like_target(target):
+                    self.hosts.append((host, getattr(node, "lineno", 0)))
+        self.generic_visit(node)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        if node.value is not None:
+            host = _http_host_from_expr(node.value, self._scopes)
+            if host:
+                self._bind_target(node.target, host)
+                if _is_url_like_target(node.target):
+                    self.hosts.append((host, getattr(node, "lineno", 0)))
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        values = list(node.args)
+        values.extend(kw.value for kw in node.keywords if kw.arg is not None)
+        for value in values:
+            host = _http_host_from_expr(value, self._scopes)
+            if host:
+                lineno = getattr(value, "lineno", node.lineno)
+                self.hosts.append((host, lineno))
+        self.generic_visit(node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._visit_scoped(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._visit_scoped(node)
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self._visit_scoped(node)
+
+    def _visit_scoped(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef,
+    ) -> None:
+        self._scopes.append({})
+        for child in node.body:
+            self.visit(child)
+        self._scopes.pop()
+
+    def _bind_target(self, target: ast.expr, host: str) -> None:
+        if isinstance(target, ast.Name):
+            self._scopes[-1][target.id] = host
+
+
+def _http_host_from_text(value: str) -> str | None:
+    text = value.strip()
+    if not (text.startswith("http://") or text.startswith("https://")):
+        return None
+    parsed = urlsplit(text)
+    if not parsed.netloc:
+        return None
+    host = parsed.netloc.split("@")[-1].split(":")[0].lower().strip()
+    if not host:
+        return None
+    return host
+
+
+def _http_host_from_expr(expr: ast.AST, scopes: list[dict[str, str]]) -> str | None:
+    if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
+        return _http_host_from_text(expr.value)
+
+    if isinstance(expr, ast.JoinedStr):
+        rendered = _render_joined_str(expr, scopes)
+        if rendered is None:
+            return None
+        return _http_host_from_text(rendered)
+
+    if isinstance(expr, ast.Name):
+        return _lookup_scoped_host(expr.id, scopes)
+
+    return None
+
+
+def _render_joined_str(expr: ast.JoinedStr, scopes: list[dict[str, str]]) -> str | None:
+    pieces: list[str] = []
+    for value in expr.values:
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            pieces.append(value.value)
+            continue
+        if isinstance(value, ast.FormattedValue):
+            if isinstance(value.value, ast.Name):
+                resolved = _lookup_scoped_host(value.value.id, scopes)
+                if resolved:
+                    current = "".join(pieces)
+                    if current.endswith("http://") or current.endswith("https://"):
+                        pieces.append(resolved)
+                    elif "http://" in current or "https://" in current:
+                        pieces.append(resolved)
+                    else:
+                        pieces.append(f"https://{resolved}")
+                    continue
+            pieces.append("x")
+            continue
+        return None
+    return "".join(pieces)
+
+
+def _lookup_scoped_host(name: str, scopes: list[dict[str, str]]) -> str | None:
+    for scope in reversed(scopes):
+        host = scope.get(name)
+        if host:
+            return host
+    return None
+
+
+def _is_url_like_target(target: ast.expr) -> bool:
+    if not isinstance(target, ast.Name):
+        return False
+    lowered = target.id.lower()
+    return "url" in lowered or "uri" in lowered or "endpoint" in lowered
 
 
 def _find_source_roots(root: Path) -> list[Path]:

@@ -61,6 +61,11 @@
         .toolbar button:hover {
             background: #f9fafb;
         }
+        .toolbar button.toggled {
+            border-color: #7f1d1d;
+            background: #fee2e2;
+            color: #7f1d1d;
+        }
         .toolbar .badge {
             font-size: 11px;
             color: #374151;
@@ -72,6 +77,20 @@
             max-width: 34vw;
             overflow: hidden;
             text-overflow: ellipsis;
+        }
+        #inspector .node-ref {
+            border: 0;
+            background: transparent;
+            padding: 0;
+            margin: 0;
+            color: #1f2937;
+            text-decoration: underline;
+            cursor: pointer;
+            font: inherit;
+            text-align: left;
+        }
+        #inspector .node-ref:hover {
+            color: #1d4ed8;
         }
         .canvas {
             width: 100vw;
@@ -127,9 +146,14 @@
             align-items: center;
             gap: 12px;
         }
-        .dimmed {
+        svg.focus-mode g.node,
+        svg.focus-mode g.edge {
             opacity: 0.14;
-            transition: opacity 0.08s ease-out;
+            transition: opacity 0.06s linear;
+        }
+        svg.focus-mode g.node.active,
+        svg.focus-mode g.edge.active {
+            opacity: 1 !important;
         }
         g.node.search-match > polygon,
         g.node.search-match > ellipse,
@@ -145,7 +169,7 @@
         }
         g.edge.active > path {
             stroke: #2563eb;
-            stroke-width: 2.4px;
+            stroke-width: 3.6px;
             opacity: 1;
         }
         g.edge.active > polygon {
@@ -153,9 +177,83 @@
             stroke: #2563eb;
             opacity: 1;
         }
+        g.edge:not(.active) > path {
+            stroke: #D9D9D9 !important;
+            stroke-width: 1.4px !important;
+            stroke-opacity: 1 !important;
+            opacity: 1 !important;
+        }
+        g.edge:not(.active) > polygon {
+            fill: #D9D9D9 !important;
+            stroke: #D9D9D9 !important;
+            fill-opacity: 1 !important;
+            stroke-opacity: 1 !important;
+            opacity: 1 !important;
+        }
+        g.edge.active {
+            opacity: 1 !important;
+        }
+        g.edge.active > path {
+            stroke: #2563eb !important;
+            stroke-width: 4.8px !important;
+            stroke-opacity: 1 !important;
+            opacity: 1 !important;
+        }
+        g.edge.active > polygon {
+            fill: #2563eb !important;
+            stroke: #2563eb !important;
+            fill-opacity: 1 !important;
+            stroke-opacity: 1 !important;
+            opacity: 1 !important;
+        }
         g.cluster > path,
         g.cluster > polygon {
             fill: none !important;
+        }
+        g.cluster.cluster-dim > path,
+        g.cluster.cluster-dim > polygon {
+            stroke: transparent !important;
+        }
+        g.cluster.cluster-dim > text {
+            fill: transparent !important;
+            stroke: transparent !important;
+        }
+        g.cluster.cluster-active > path,
+        g.cluster.cluster-active > polygon {
+            stroke: #000000 !important;
+        }
+        svg.review-mode g.node.arch-hot > polygon,
+        svg.review-mode g.node.arch-hot > ellipse,
+        svg.review-mode g.node.arch-hot > rect {
+            fill: #FECACA !important;
+            stroke: #B91C1C !important;
+            stroke-width: 2.8px !important;
+        }
+        svg.review-mode g.node.arch-warm > polygon,
+        svg.review-mode g.node.arch-warm > ellipse,
+        svg.review-mode g.node.arch-warm > rect {
+            fill: #FEF3C7 !important;
+            stroke: #B45309 !important;
+            stroke-width: 2.2px !important;
+        }
+        svg.review-mode g.edge.arch-hot > path {
+            stroke: #DC2626 !important;
+            stroke-width: 3.2px !important;
+        }
+        svg.review-mode g.edge.arch-hot > polygon {
+            fill: #DC2626 !important;
+            stroke: #DC2626 !important;
+        }
+        svg.review-mode g.cluster.arch-hot > path,
+        svg.review-mode g.cluster.arch-hot > polygon {
+            fill: #FECACA66 !important;
+            stroke: #B91C1C !important;
+            stroke-width: 2px !important;
+        }
+        svg.review-mode g.cluster.arch-warm > path,
+        svg.review-mode g.cluster.arch-warm > polygon {
+            fill: #FEF3C74D !important;
+            stroke: #B45309 !important;
         }
     </style>
 </head>
@@ -166,6 +264,8 @@
         <button id="btn-reset-zoom" title="Reset zoom to 100% (0)">100%</button>
         <button id="btn-zoom-in" title="Zoom in (+)">+</button>
         <button id="btn-zoom-out" title="Zoom out (-)">-</button>
+        <button id="btn-chain" title="Show dependency chain (C)">Chain</button>
+        <button id="btn-arch-review" title="Highlight likely bottlenecks (A)">Architecture review</button>
         <button id="btn-clear-focus" title="Clear current pin/focus (Esc)">Clear focus</button>
         <input id="search" type="search" placeholder="Search module/path… (/)">
         <span class="badge" id="search-count">0 matches</span>
@@ -215,8 +315,8 @@
 <!-- src/import_cruiser/analyzer.py&#45;&gt;src/import_cruiser/graph.py -->
 <g id="edge1" class="edge">
 <title>src/import_cruiser/analyzer.py&#45;&gt;src/import_cruiser/graph.py</title>
-<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M153.15,-111.67C155.02,-111.08 156.91,-110.48 158.79,-109.89"/>
-<polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="159.01,-112.02 164.1,-108.21 157.75,-108.02 159.01,-112.02"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M153.15,-111.67C155.02,-111.08 156.91,-110.48 158.79,-109.89"/>
+<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="159.01,-112.02 164.1,-108.21 157.75,-108.02 159.01,-112.02"/>
 </g>
 <!-- src/import_cruiser/cli.py -->
 <g id="node2" class="node">
@@ -230,8 +330,8 @@
 <!-- src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/analyzer.py -->
 <g id="edge2" class="edge">
 <title>src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/analyzer.py</title>
-<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M65.59,-86.34C73.03,-91.38 82.45,-97.64 91,-103 93.16,-104.35 95.41,-105.73 97.68,-107.1"/>
-<polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="96.48,-108.83 102.71,-110.09 98.63,-105.22 96.48,-108.83"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M65.59,-86.34C73.03,-91.38 82.45,-97.64 91,-103 93.16,-104.35 95.41,-105.73 97.68,-107.1"/>
+<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="96.48,-108.83 102.71,-110.09 98.63,-105.22 96.48,-108.83"/>
 </g>
 <!-- src/import_cruiser/config.py -->
 <g id="node3" class="node">
@@ -245,8 +345,8 @@
 <!-- src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/config.py -->
 <g id="edge3" class="edge">
 <title>src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/config.py</title>
-<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M56.83,-67.65C63.06,-56.75 75.01,-39.3 91,-32 111.88,-22.46 137.66,-24.56 158.11,-28.99"/>
-<polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="157.54,-31.02 163.87,-30.38 158.52,-26.93 157.54,-31.02"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M56.83,-67.65C63.06,-56.75 75.01,-39.3 91,-32 111.88,-22.46 137.66,-24.56 158.11,-28.99"/>
+<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="157.54,-31.02 163.87,-30.38 158.52,-26.93 157.54,-31.02"/>
 </g>
 <!-- src/import_cruiser/exporter.py -->
 <g id="node5" class="node">
@@ -260,14 +360,14 @@
 <!-- src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/exporter.py -->
 <g id="edge4" class="edge">
 <title>src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/exporter.py</title>
-<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M78.32,-77C79.8,-77 81.31,-77 82.82,-77"/>
-<polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="82.5,-79.1 88.5,-77 82.5,-74.9 82.5,-79.1"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M78.32,-77C79.8,-77 81.31,-77 82.82,-77"/>
+<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="82.5,-79.1 88.5,-77 82.5,-74.9 82.5,-79.1"/>
 </g>
 <!-- src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/graph.py -->
 <g id="edge5" class="edge">
 <title>src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/graph.py</title>
-<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M72.69,-86.28C78.51,-88.52 84.91,-90.65 91,-92 112.9,-96.85 138.02,-98.62 157.88,-99.17"/>
-<polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="157.82,-101.26 163.86,-99.28 157.9,-97.07 157.82,-101.26"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M72.69,-86.28C78.51,-88.52 84.91,-90.65 91,-92 112.9,-96.85 138.02,-98.62 157.88,-99.17"/>
+<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="157.82,-101.26 163.86,-99.28 157.9,-97.07 157.82,-101.26"/>
 </g>
 <!-- src/import_cruiser/validator.py -->
 <g id="node7" class="node">
@@ -281,8 +381,8 @@
 <!-- src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/validator.py -->
 <g id="edge6" class="edge">
 <title>src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/validator.py</title>
-<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M73.65,-67.67C79.47,-65.17 85.86,-62.41 92.03,-59.75"/>
-<polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="92.77,-61.72 97.45,-57.42 91.11,-57.86 92.77,-61.72"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M73.65,-67.67C79.47,-65.17 85.86,-62.41 92.03,-59.75"/>
+<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="92.77,-61.72 97.45,-57.42 91.11,-57.86 92.77,-61.72"/>
 </g>
 <!-- src/import_cruiser/detector.py -->
 <g id="node4" class="node">
@@ -296,26 +396,26 @@
 <!-- src/import_cruiser/detector.py&#45;&gt;src/import_cruiser/graph.py -->
 <g id="edge7" class="edge">
 <title>src/import_cruiser/detector.py&#45;&gt;src/import_cruiser/graph.py</title>
-<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M144.86,-141.65C148.1,-139.93 151.33,-138.03 154.25,-136 163.17,-129.8 172.04,-121.59 179.06,-114.48"/>
-<polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="180.21,-116.32 182.84,-110.54 177.18,-113.41 180.21,-116.32"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M144.86,-141.65C148.1,-139.93 151.33,-138.03 154.25,-136 163.17,-129.8 172.04,-121.59 179.06,-114.48"/>
+<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="180.21,-116.32 182.84,-110.54 177.18,-113.41 180.21,-116.32"/>
 </g>
 <!-- src/import_cruiser/exporter.py&#45;&gt;src/import_cruiser/graph.py -->
 <g id="edge8" class="edge">
 <title>src/import_cruiser/exporter.py&#45;&gt;src/import_cruiser/graph.py</title>
-<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M153.15,-86.33C155.02,-86.92 156.91,-87.52 158.79,-88.11"/>
-<polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="157.75,-89.98 164.1,-89.79 159.01,-85.98 157.75,-89.98"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M153.15,-86.33C155.02,-86.92 156.91,-87.52 158.79,-88.11"/>
+<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="157.75,-89.98 164.1,-89.79 159.01,-85.98 157.75,-89.98"/>
 </g>
 <!-- src/import_cruiser/validator.py&#45;&gt;src/import_cruiser/config.py -->
 <g id="edge9" class="edge">
 <title>src/import_cruiser/validator.py&#45;&gt;src/import_cruiser/config.py</title>
-<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M154.37,-43.91C155.69,-43.78 157.02,-43.64 158.34,-43.51"/>
-<polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="158.26,-45.63 164.02,-42.94 157.84,-41.45 158.26,-45.63"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M154.37,-43.91C155.69,-43.78 157.02,-43.64 158.34,-43.51"/>
+<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="158.26,-45.63 164.02,-42.94 157.84,-41.45 158.26,-45.63"/>
 </g>
 <!-- src/import_cruiser/validator.py&#45;&gt;src/import_cruiser/graph.py -->
 <g id="edge10" class="edge">
 <title>src/import_cruiser/validator.py&#45;&gt;src/import_cruiser/graph.py</title>
-<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" d="M144.86,-56.35C148.1,-58.07 151.33,-59.97 154.25,-62 163.17,-68.2 172.04,-76.41 179.06,-83.52"/>
-<polygon fill="#000000" fill-opacity="0.200000" stroke="#000000" stroke-width="2" stroke-opacity="0.200000" points="177.18,-84.59 182.84,-87.46 180.21,-81.68 177.18,-84.59"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M144.86,-56.35C148.1,-58.07 151.33,-59.97 154.25,-62 163.17,-68.2 172.04,-76.41 179.06,-83.52"/>
+<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="177.18,-84.59 182.84,-87.46 180.21,-81.68 177.18,-84.59"/>
 </g>
 </g>
 </svg>
@@ -335,6 +435,7 @@
         const searchInput = document.getElementById('search');
         const searchCount = document.getElementById('search-count');
         const repoBadge = document.getElementById('repo-badge');
+        const initialViewBox = svg?.getAttribute('viewBox') || '';
         let scale = 1;
         let originX = 0;
         let originY = 0;
@@ -342,6 +443,7 @@
         let startX = 0;
         let startY = 0;
         let pinned = null;
+        let activeNodeName = null;
         let searchResults = [];
         let searchIndex = -1;
 
@@ -356,11 +458,38 @@
             group?.querySelector('title')?.textContent?.trim() || '';
         const nodeGroups = [...svg.querySelectorAll('g.node')];
         const edgeGroups = [...svg.querySelectorAll('g.edge')];
+        const clusterGroups = [...svg.querySelectorAll('g.cluster')];
+        const clusterByKey = new Map();
         const nodeByName = new Map();
         const outgoing = new Map();
         const incoming = new Map();
+        const edgesByNode = new Map();
+        const edgesByPair = new Map();
+        const nodeClusterChain = new Map();
+        const nodeToDeepestClusterKey = new Map();
+        const nodeClusterKeysByDepth = new Map();
+        const clusterNodeNames = new Map();
+        const summaryClusterMembers = new Map();
         const repos = new Set();
         const packageRoots = new Set();
+        const activeNodes = new Set();
+        const activeEdges = new Set();
+        let hoverFrame = null;
+        let inspectorHoverName = null;
+        let lastFocusedNodeName = null;
+        let lastClickNodeName = null;
+        let lastClickAtMs = 0;
+        const DOUBLE_CLICK_MS = 320;
+        let reviewMode = false;
+        let reviewSummary = null;
+
+        clusterGroups.forEach((cluster) => {
+            const raw = titleOf(cluster);
+            const key = raw.startsWith('cluster_') ? raw.slice(8) : raw;
+            cluster.dataset.clusterKey = key;
+            clusterByKey.set(key, cluster);
+            clusterNodeNames.set(key, []);
+        });
 
         nodeGroups.forEach((node) => {
             const name = titleOf(node);
@@ -368,6 +497,7 @@
             nodeByName.set(name, node);
             outgoing.set(name, []);
             incoming.set(name, []);
+            edgesByNode.set(name, []);
             const topPackage = (name.split('.')[0] || '').trim();
             if (topPackage) packageRoots.add(topPackage);
             const path =
@@ -377,6 +507,29 @@
             node.dataset.path = path;
             if (path.includes('/riskstudio-worker/')) repos.add('riskstudio-worker');
             if (path.includes('/riskstudio-sdk/')) repos.add('riskstudio-sdk');
+
+            const parts = name.split('/').filter(Boolean);
+            const clusterChain = [];
+            let prefix = '';
+            for (const part of parts.slice(0, -1)) {
+                prefix = prefix ? `${prefix}/${part}` : part;
+                const cluster = clusterByKey.get(prefix);
+                if (cluster) clusterChain.push(cluster);
+            }
+            nodeClusterChain.set(name, clusterChain);
+            const deepest = clusterChain.length
+                ? clusterChain[clusterChain.length - 1].dataset.clusterKey || ''
+                : '';
+            nodeToDeepestClusterKey.set(name, deepest);
+            if (deepest) (clusterNodeNames.get(deepest) || []).push(name);
+            const depthKeys = clusterChain.map((cluster) => cluster.dataset.clusterKey || '');
+            nodeClusterKeysByDepth.set(name, depthKeys);
+            depthKeys.forEach((summaryKey) => {
+                if (!summaryKey) return;
+                const members = summaryClusterMembers.get(summaryKey) || [];
+                members.push(name);
+                summaryClusterMembers.set(summaryKey, members);
+            });
         });
 
         if (repos.size) {
@@ -395,8 +548,133 @@
             if (src && tgt) {
                 outgoing.get(src)?.push(tgt);
                 incoming.get(tgt)?.push(src);
+                edgesByNode.get(src)?.push(edge);
+                edgesByNode.get(tgt)?.push(edge);
+                const key = `${src} ${tgt}`;
+                const existing = edgesByPair.get(key) || [];
+                existing.push(edge);
+                edgesByPair.set(key, existing);
             }
         });
+
+        const _clusterBox = (clusterKey) => {
+            const cluster = clusterByKey.get(clusterKey);
+            if (!cluster) return null;
+            const shape = cluster.querySelector('path, polygon');
+            const box = shape ? shape.getBBox() : cluster.getBBox();
+            if (box.width > 0 && box.height > 0) return box;
+            const members = summaryClusterMembers.get(clusterKey) || [];
+            if (!members.length) return null;
+            const node = nodeByName.get(members[0]);
+            if (!node) return null;
+            return node.getBBox();
+        };
+
+        const _clusterCenter = (clusterKey) => {
+            const box = _clusterBox(clusterKey);
+            if (!box) return null;
+            return _boxCenter(box);
+        };
+
+        const _boxCenter = (box) => ({
+            x: box.x + box.width / 2,
+            y: box.y + box.height / 2,
+        });
+
+        const _boxBorderPoint = (box, toward) => {
+            const center = _boxCenter(box);
+            let dx = toward.x - center.x;
+            let dy = toward.y - center.y;
+            if (Math.abs(dx) < 0.0001 && Math.abs(dy) < 0.0001) {
+                dx = 1;
+                dy = 0;
+            }
+            const halfW = Math.max(1, box.width / 2);
+            const halfH = Math.max(1, box.height / 2);
+            const tx = halfW / Math.max(0.0001, Math.abs(dx));
+            const ty = halfH / Math.max(0.0001, Math.abs(dy));
+            const t = Math.min(tx, ty);
+            return {
+                x: center.x + dx * t,
+                y: center.y + dy * t,
+            };
+        };
+
+        const _percentileThreshold = (values, percentile, minimum) => {
+            if (!values.length) return minimum;
+            const sorted = [...values].sort((a, b) => a - b);
+            const index = Math.max(0, Math.min(sorted.length - 1, Math.floor(sorted.length * percentile)));
+            return Math.max(minimum, sorted[index]);
+        };
+
+        const _buildArchitectureReview = () => {
+            const nodeStats = [...nodeByName.keys()].map((name) => {
+                const inDegree = (incoming.get(name) || []).length;
+                const outDegree = (outgoing.get(name) || []).length;
+                const score = inDegree + outDegree + Math.sqrt(inDegree * outDegree);
+                return { name, inDegree, outDegree, score };
+            });
+            const nodeScores = nodeStats.map((item) => item.score);
+            const hotNodeThreshold = _percentileThreshold(nodeScores, 0.9, 4);
+            const warmNodeThreshold = _percentileThreshold(nodeScores, 0.75, 2.5);
+
+            nodeStats.forEach((item) => {
+                const node = nodeByName.get(item.name);
+                if (!node) return;
+                if (item.score >= hotNodeThreshold) {
+                    node.classList.add('arch-hot');
+                } else if (item.score >= warmNodeThreshold) {
+                    node.classList.add('arch-warm');
+                }
+            });
+
+            const edgeStats = edgeGroups.map((edge) => {
+                const src = edge.dataset.src || '';
+                const tgt = edge.dataset.tgt || '';
+                const score = (outgoing.get(src) || []).length + (incoming.get(tgt) || []).length;
+                return { edge, src, tgt, score };
+            });
+            const edgeScores = edgeStats.map((item) => item.score);
+            const hotEdgeThreshold = _percentileThreshold(edgeScores, 0.9, 4);
+            edgeStats.forEach((item) => {
+                if (item.score >= hotEdgeThreshold) item.edge.classList.add('arch-hot');
+            });
+
+            const clusterScore = new Map();
+            clusterGroups.forEach((cluster) => clusterScore.set(cluster, 0));
+            nodeStats.forEach((item) => {
+                const chain = nodeClusterChain.get(item.name) || [];
+                chain.forEach((cluster) => {
+                    clusterScore.set(cluster, (clusterScore.get(cluster) || 0) + item.score);
+                });
+            });
+            const clusterValues = [...clusterScore.values()];
+            const hotClusterThreshold = _percentileThreshold(clusterValues, 0.9, 6);
+            const warmClusterThreshold = _percentileThreshold(clusterValues, 0.75, 3);
+            clusterScore.forEach((score, cluster) => {
+                if (score >= hotClusterThreshold) {
+                    cluster.classList.add('arch-hot');
+                } else if (score >= warmClusterThreshold) {
+                    cluster.classList.add('arch-warm');
+                }
+            });
+
+            const topNodes = [...nodeStats]
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 6)
+                .map((item) => item.name);
+            const topEdges = [...edgeStats]
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 6)
+                .map((item) => `${item.src} -> ${item.tgt}`);
+            const topClusters = [...clusterScore.entries()]
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 4)
+                .map(([cluster]) => cluster.dataset.clusterKey || titleOf(cluster));
+            return { topNodes, topEdges, topClusters, hotNodeThreshold, hotEdgeThreshold };
+        };
+
+        reviewSummary = _buildArchitectureReview();
 
         svg.querySelectorAll('a').forEach((link) => {
             link.addEventListener('click', (event) => event.preventDefault());
@@ -417,59 +695,160 @@
             if (!vb.width || !vb.height) return;
             const scaleX = canvas.clientWidth / vb.width;
             const scaleY = canvas.clientHeight / vb.height;
-            scale = Math.min(scaleX, scaleY) * 0.90;
+            scale = Math.min(scaleX, scaleY) * 0.84;
             originX = (canvas.clientWidth - vb.width * scale) / 2;
             originY = (canvas.clientHeight - vb.height * scale) / 2;
             applyTransform();
         };
 
+        const _syncClassSet = (previous, next, className) => {
+            previous.forEach((element) => {
+                if (!next.has(element)) element.classList.remove(className);
+            });
+            next.forEach((element) => {
+                if (!previous.has(element)) element.classList.add(className);
+            });
+            previous.clear();
+            next.forEach((element) => previous.add(element));
+        };
+
+        const _applyFocus = (nextNodes, nextEdges) => {
+            const hasFocus = nextNodes.size > 0 || nextEdges.size > 0;
+            svg.classList.toggle('focus-mode', hasFocus);
+            _syncClassSet(activeNodes, nextNodes, 'active');
+            _syncClassSet(activeEdges, nextEdges, 'active');
+        };
+
+        const _clearFocusClasses = () => {
+            svg.classList.remove('focus-mode');
+            _applyFocus(new Set(), new Set());
+        };
+
+        const _scheduleHover = (callback) => {
+            if (hoverFrame !== null) cancelAnimationFrame(hoverFrame);
+            hoverFrame = requestAnimationFrame(() => {
+                hoverFrame = null;
+                callback();
+            });
+        };
+
+        const _nodeRefList = (items) =>
+            `<ul>${items.map((item) =>
+                `<li><button type="button" class="node-ref" data-node-ref="${esc(item)}">${esc(item)}</button></li>`
+            ).join('')}</ul>`;
+
+        const renderArchitectureReview = () => {
+            if (!reviewSummary) return;
+            const nodeList = reviewSummary.topNodes.length
+                ? _nodeRefList(reviewSummary.topNodes)
+                : '<div class="muted">none</div>';
+            const edgeList = reviewSummary.topEdges.length
+                ? `<ul>${reviewSummary.topEdges.map((edge) => `<li>${esc(edge)}</li>`).join('')}</ul>`
+                : '<div class="muted">none</div>';
+            const clusterList = reviewSummary.topClusters.length
+                ? `<ul>${reviewSummary.topClusters.map((cluster) => `<li>${esc(cluster)}</li>`).join('')}</ul>`
+                : '<div class="muted">none</div>';
+            inspector.innerHTML = `
+                <h4>Architecture review</h4>
+                <div class="muted">Heuristics: node centrality and edge fan-in/fan-out hotspots.</div>
+                <div><strong>Hot modules</strong> (red)</div>
+                ${nodeList}
+                <div><strong>Hot dependencies</strong> (red edges)</div>
+                ${edgeList}
+                <div><strong>Hot clusters</strong> (cluster tint)</div>
+                ${clusterList}
+                <div><strong>Improvement ideas</strong></div>
+                <ul>
+                    <li>Split top hot modules by ownership boundary to reduce coupling.</li>
+                    <li>Replace high-traffic direct dependencies with ports/adapters or events.</li>
+                    <li>Move heavy integration code from core clusters into edge adapters.</li>
+                </ul>
+            `;
+        };
+
         const clearFocus = (force = false) => {
             if (pinned && !force) return;
-            nodeGroups.forEach((n) => n.classList.remove('dimmed', 'active'));
-            edgeGroups.forEach((e) => e.classList.remove('dimmed', 'active'));
+            _clearFocusClasses();
+            clusterGroups.forEach((c) => c.classList.remove('cluster-dim', 'cluster-active'));
+            activeNodeName = null;
+            inspectorHoverName = null;
+            if (reviewMode) {
+                renderArchitectureReview();
+                return;
+            }
             inspector.innerHTML =
                 '<h4>Context</h4>' +
                 '<div class="muted">Click a node or edge to pin details.</div>';
         };
 
-        const markNodeActive = (name) => {
-            const n = nodeByName.get(name);
-            if (n) {
-                n.classList.remove('dimmed');
-                n.classList.add('active');
+        const focusNodeClusters = (name) => {
+            const activeClusters = new Set(nodeClusterChain.get(name) || []);
+            if (!activeClusters.size) {
+                clusterGroups.forEach((cluster) => {
+                    cluster.classList.remove('cluster-dim', 'cluster-active');
+                });
+                return;
             }
+            clusterGroups.forEach((cluster) => {
+                cluster.classList.add('cluster-dim');
+                cluster.classList.remove('cluster-active');
+            });
+            activeClusters.forEach((cluster) => {
+                cluster.classList.remove('cluster-dim');
+                cluster.classList.add('cluster-active');
+            });
         };
 
-        const focusNode = (name, isPinned = false) => {
+        const focusNodeClustersForNames = (names) => {
+            const activeClusters = new Set();
+            names.forEach((name) => {
+                (nodeClusterChain.get(name) || []).forEach((cluster) => {
+                    activeClusters.add(cluster);
+                });
+            });
+            if (!activeClusters.size) {
+                clusterGroups.forEach((cluster) => {
+                    cluster.classList.remove('cluster-dim', 'cluster-active');
+                });
+                return;
+            }
+            clusterGroups.forEach((cluster) => {
+                cluster.classList.add('cluster-dim');
+                cluster.classList.remove('cluster-active');
+            });
+            activeClusters.forEach((cluster) => {
+                cluster.classList.remove('cluster-dim');
+                cluster.classList.add('cluster-active');
+            });
+        };
+
+        const _collectNodeElements = (names) => {
+            const result = new Set();
+            names.forEach((name) => {
+                const node = nodeByName.get(name);
+                if (node) result.add(node);
+            });
+            return result;
+        };
+
+        const focusNode = (name, isPinned = false, updateInspector = true) => {
+            activeNodeName = name;
+            lastFocusedNodeName = name;
             const out = outgoing.get(name) || [];
             const inc = incoming.get(name) || [];
             const neighbors = new Set([name, ...out, ...inc]);
+            const nextNodes = _collectNodeElements(neighbors);
+            const nextEdges = new Set(edgesByNode.get(name) || []);
+            _applyFocus(nextNodes, nextEdges);
+            focusNodeClusters(name);
 
-            nodeGroups.forEach((n) => {
-                n.classList.add('dimmed');
-                n.classList.remove('active');
-            });
-            edgeGroups.forEach((e) => {
-                e.classList.add('dimmed');
-                e.classList.remove('active');
-            });
-
-            neighbors.forEach(markNodeActive);
-
-            edgeGroups.forEach((edge) => {
-                const src = edge.dataset.src;
-                const tgt = edge.dataset.tgt;
-                if (src === name || tgt === name) {
-                    edge.classList.remove('dimmed');
-                    edge.classList.add('active');
-                }
-            });
+            if (!updateInspector) return;
 
             const outList = out.length
-                ? `<ul>${out.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>`
+                ? _nodeRefList(out)
                 : '<div class="muted">none</div>';
             const inList = inc.length
-                ? `<ul>${inc.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>`
+                ? _nodeRefList(inc)
                 : '<div class="muted">none</div>';
             const pinBadge = isPinned
                 ? '<div class="muted"><strong>Pinned</strong> · click empty space or press Esc to release</div>'
@@ -485,25 +864,76 @@
             `;
         };
 
-        const focusEdge = (src, tgt, isPinned = false) => {
-            nodeGroups.forEach((n) => {
-                n.classList.add('dimmed');
-                n.classList.remove('active');
-            });
-            edgeGroups.forEach((e) => {
-                e.classList.add('dimmed');
-                e.classList.remove('active');
-            });
+        const _collectTransitive = (seed, adjacency) => {
+            const visited = new Set([seed]);
+            const queue = [seed];
+            while (queue.length) {
+                const node = queue.shift();
+                const next = adjacency.get(node) || [];
+                next.forEach((candidate) => {
+                    if (visited.has(candidate)) return;
+                    visited.add(candidate);
+                    queue.push(candidate);
+                });
+            }
+            return visited;
+        };
 
-            markNodeActive(src);
-            markNodeActive(tgt);
-
+        const focusNodeTransitive = (name, isPinned = false, updateInspector = true) => {
+            activeNodeName = name;
+            lastFocusedNodeName = name;
+            const descendants = _collectTransitive(name, outgoing);
+            const ancestors = _collectTransitive(name, incoming);
+            const activeNames = new Set([...descendants, ...ancestors]);
+            const nextNodes = _collectNodeElements(activeNames);
+            const nextEdges = new Set();
             edgeGroups.forEach((edge) => {
-                if (edge.dataset.src === src && edge.dataset.tgt === tgt) {
-                    edge.classList.remove('dimmed');
-                    edge.classList.add('active');
+                const src = edge.dataset.src;
+                const tgt = edge.dataset.tgt;
+                if (activeNames.has(src) && activeNames.has(tgt)) {
+                    nextEdges.add(edge);
                 }
             });
+            _applyFocus(nextNodes, nextEdges);
+            focusNodeClustersForNames(activeNames);
+
+            if (!updateInspector) return;
+            const pinBadge = isPinned
+                ? '<div class="muted"><strong>Pinned</strong> · transitief (parents + children, recursief)</div>'
+                : '';
+            inspector.innerHTML = `
+                <h4>${esc(name)}</h4>
+                ${pinBadge}
+                <div><strong>Transitive context</strong></div>
+                <div>Nodes: ${activeNames.size}</div>
+                <div>Ancestors: ${Math.max(0, ancestors.size - 1)}</div>
+                <div>Descendants: ${Math.max(0, descendants.size - 1)}</div>
+            `;
+        };
+
+        const restorePinnedView = () => {
+            if (!pinned) {
+                clearFocus(true);
+                return;
+            }
+            if (pinned.kind === 'node') {
+                focusNode(pinned.name, true);
+                return;
+            }
+            if (pinned.kind === 'node-transitive') {
+                focusNodeTransitive(pinned.name, true);
+                return;
+            }
+            focusEdge(pinned.src, pinned.tgt, true);
+        };
+
+        const focusEdge = (src, tgt, isPinned = false) => {
+            activeNodeName = null;
+            const nextNodes = _collectNodeElements(new Set([src, tgt]));
+            const key = `${src} ${tgt}`;
+            const nextEdges = new Set(edgesByPair.get(key) || []);
+            _applyFocus(nextNodes, nextEdges);
+            clusterGroups.forEach((c) => c.classList.remove('cluster-dim', 'cluster-active'));
 
             const pinBadge = isPinned
                 ? '<div class="muted"><strong>Pinned</strong> · click empty space or press Esc to release</div>'
@@ -515,6 +945,27 @@
                 <div><strong>From:</strong> ${esc(src)}</div>
                 <div><strong>To:</strong> ${esc(tgt)}</div>
             `;
+        };
+
+        const triggerDependencyChain = () => {
+            const chainName = pinned?.kind === 'node' || pinned?.kind === 'node-transitive'
+                ? pinned.name
+                : (activeNodeName || lastFocusedNodeName);
+            if (!chainName) return;
+            pinned = { kind: 'node-transitive', name: chainName };
+            focusNodeTransitive(chainName, true);
+        };
+
+        const setArchitectureReviewMode = (enabled) => {
+            reviewMode = enabled;
+            svg.classList.toggle('review-mode', reviewMode);
+            const reviewButton = document.getElementById('btn-arch-review');
+            reviewButton.classList.toggle('toggled', reviewMode);
+            if (reviewMode) {
+                renderArchitectureReview();
+                return;
+            }
+            restorePinnedView();
         };
 
         const clearSearchStyles = () => {
@@ -561,14 +1012,30 @@
             const name = node.dataset.name;
             node.addEventListener('mouseenter', () => {
                 if (pinned) return;
-                focusNode(name);
+                _scheduleHover(() => focusNode(name));
             });
-            node.addEventListener('mouseleave', () => clearFocus());
+            node.addEventListener('mouseleave', () => _scheduleHover(() => clearFocus()));
             node.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
+                const nowMs = Date.now();
+                const isRapidSecondClick =
+                    lastClickNodeName === name && (nowMs - lastClickAtMs) <= DOUBLE_CLICK_MS;
+                lastClickNodeName = name;
+                lastClickAtMs = nowMs;
+                if (isRapidSecondClick) {
+                    pinned = { kind: 'node-transitive', name };
+                    focusNodeTransitive(name, true);
+                    return;
+                }
                 pinned = { kind: 'node', name };
                 focusNode(name, true);
+            });
+            node.addEventListener('dblclick', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                pinned = { kind: 'node-transitive', name };
+                focusNodeTransitive(name, true);
             });
         });
 
@@ -578,15 +1045,48 @@
             if (!src || !tgt) return;
             edge.addEventListener('mouseenter', () => {
                 if (pinned) return;
-                focusEdge(src, tgt);
+                _scheduleHover(() => focusEdge(src, tgt));
             });
-            edge.addEventListener('mouseleave', () => clearFocus());
+            edge.addEventListener('mouseleave', () => _scheduleHover(() => clearFocus()));
             edge.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 pinned = { kind: 'edge', src, tgt };
                 focusEdge(src, tgt, true);
             });
+        });
+
+        inspector.addEventListener('click', (event) => {
+            const target = event.target instanceof Element ? event.target : null;
+            const nodeRef = target ? target.closest('[data-node-ref]') : null;
+            if (!nodeRef) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const name = nodeRef.getAttribute('data-node-ref') || '';
+            if (!name) return;
+            pinned = { kind: 'node', name };
+            focusNode(name, true);
+        });
+
+        inspector.addEventListener('mouseover', (event) => {
+            const target = event.target instanceof Element ? event.target : null;
+            const nodeRef = target ? target.closest('[data-node-ref]') : null;
+            if (!nodeRef) return;
+            const name = nodeRef.getAttribute('data-node-ref') || '';
+            if (!name) return;
+            if (name === inspectorHoverName) return;
+            inspectorHoverName = name;
+            _scheduleHover(() => focusNode(name, false, false));
+        });
+
+        inspector.addEventListener('mouseout', (event) => {
+            const target = event.target instanceof Element ? event.target : null;
+            const nodeRef = target ? target.closest('[data-node-ref]') : null;
+            if (!nodeRef) return;
+            const related = event.relatedTarget;
+            if (related instanceof Node && nodeRef.contains(related)) return;
+            inspectorHoverName = null;
+            _scheduleHover(() => restorePinnedView());
         });
 
         canvas.addEventListener('click', (event) => {
@@ -605,6 +1105,21 @@
                 event.preventDefault();
                 searchInput.focus();
                 searchInput.select();
+                return;
+            }
+            const typingTarget = event.target;
+            const isTyping =
+                typingTarget instanceof HTMLInputElement ||
+                typingTarget instanceof HTMLTextAreaElement ||
+                (typingTarget instanceof HTMLElement && typingTarget.isContentEditable);
+            if (!isTyping && (event.key === 'a' || event.key === 'A')) {
+                event.preventDefault();
+                setArchitectureReviewMode(!reviewMode);
+                return;
+            }
+            if (!isTyping && (event.key === 'c' || event.key === 'C')) {
+                event.preventDefault();
+                triggerDependencyChain();
                 return;
             }
             if (event.key === 'f' || event.key === 'F') {
@@ -672,6 +1187,12 @@
         document.getElementById('btn-zoom-out').addEventListener('click', () => {
             scale = Math.max(0.2, scale - 0.1);
             applyTransform();
+        });
+        document.getElementById('btn-chain').addEventListener('click', () => {
+            triggerDependencyChain();
+        });
+        document.getElementById('btn-arch-review').addEventListener('click', () => {
+            setArchitectureReviewMode(!reviewMode);
         });
         document.getElementById('btn-clear-focus').addEventListener('click', () => {
             pinned = null;
