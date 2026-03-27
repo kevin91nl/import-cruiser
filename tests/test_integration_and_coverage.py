@@ -615,8 +615,30 @@ def test_exporter_error_and_style_paths(monkeypatch: pytest.MonkeyPatch) -> None
         "default",
         allowed={"a.c"},
         style="default",
+        show_loc=False,
     )
     assert skipped_lines == [""]
+
+    nested_flat = {
+        "pkg": {"id": "pkg", "label": "pkg", "parent": None, "modules": []},
+        "pkg.sub": {
+            "id": "pkg.sub",
+            "label": "sub",
+            "parent": "pkg",
+            "modules": [Module(name="pkg.sub.mod", path="/x.py", loc=4)],
+        },
+    }
+    loc_lines = _render_cluster_tree(
+        {"pkg": nested_flat["pkg"]},
+        nested_flat,
+        set(),
+        "    ",
+        "default",
+        allowed={"pkg", "pkg.sub"},
+        style="default",
+        show_loc=True,
+    )
+    assert any("pkg (4 LOC)" in line for line in loc_lines)
 
     monkeypatch.setattr(
         "import_cruiser.exporter.os.path.commonpath",

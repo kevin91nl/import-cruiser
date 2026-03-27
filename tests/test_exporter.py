@@ -265,6 +265,41 @@ class TestExportDot:
         line = _depcruise_cluster_line(module, node_id, str(tmp_path / "root"))
         assert line.count("{") == line.count("}")
 
+    def test_labels_include_loc_for_modules_and_clusters(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "src" / "pkg"
+        pkg.mkdir(parents=True)
+        (pkg / "a.py").write_text("x = 1\n")
+        (pkg / "b.py").write_text("y = 2\n")
+        graph = DependencyGraph()
+        graph.add_module(Module(name="pkg.a", path=str(pkg / "a.py"), loc=3))
+        graph.add_module(Module(name="pkg.b", path=str(pkg / "b.py"), loc=5))
+        graph.add_dependency(Dependency(source="pkg.a", target="pkg.b", line=1))
+
+        depcruise = export_dot(graph, style="depcruise", show_loc=True)
+        assert "a.py (3 LOC)" in depcruise
+        assert "pkg (8 LOC)" in depcruise
+
+        cruiser = export_dot(
+            graph,
+            style="cruiser",
+            cluster_mode="module",
+            cluster_depth=2,
+            show_loc=True,
+        )
+        assert 'label="a (3 LOC)"' in cruiser
+        assert 'label="pkg (8 LOC)"' in cruiser
+
+    def test_labels_hide_loc_by_default(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "src" / "pkg"
+        pkg.mkdir(parents=True)
+        graph = DependencyGraph()
+        graph.add_module(Module(name="pkg.a", path=str(pkg / "a.py"), loc=3))
+        graph.add_module(Module(name="pkg.b", path=str(pkg / "b.py"), loc=5))
+        graph.add_dependency(Dependency(source="pkg.a", target="pkg.b", line=1))
+
+        depcruise = export_dot(graph, style="depcruise")
+        assert "LOC" not in depcruise
+
     def test_http_external_node_rejects_url_like_names(self) -> None:
         assert not _is_http_external_node("https://example.com", "")
         assert not _is_http_external_node("api/shodan.io", "")

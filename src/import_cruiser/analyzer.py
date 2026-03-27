@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import ast
+import io
 import os
 import re
+import token
+import tokenize
 from urllib.parse import urlsplit
 import warnings
 from pathlib import Path
@@ -156,6 +159,7 @@ class Analyzer:
 
         # First pass: register all modules
         module_map: dict[str, Path] = {}
+        source_map: dict[str, str] = {}
         for py_file in py_files:
             base = _select_source_root(py_file, source_roots) or self.root
             mod_name = _module_name_from_path(
@@ -163,14 +167,18 @@ class Analyzer:
                 base,
                 self.normalize_hyphens,
             )
+            source = py_file.read_text(encoding="utf-8", errors="replace")
             module_map[mod_name] = py_file
-            graph.add_module(Module(name=mod_name, path=str(py_file)))
+            source_map[mod_name] = source
+            graph.add_module(
+                Module(name=mod_name, path=str(py_file), loc=_count_loc(source))
+            )
 
         known_modules = set(module_map.keys())
 
         # Second pass: resolve imports → edges
         for mod_name, py_file in module_map.items():
-            source = py_file.read_text(encoding="utf-8", errors="replace")
+            source = source_map.get(mod_name, "")
             raw_imports = _collect_imports(source, mod_name)
             for imported, lineno in raw_imports:
                 # Only keep dependencies that are internal to the project
@@ -367,6 +375,67 @@ def _is_url_like_target(target: ast.expr) -> bool:
         return False
     lowered = target.id.lower()
     return "url" in lowered or "uri" in lowered or "endpoint" in lowered
+
+
+def _count_loc(source: str) -> int:
+    """Count executable code lines excluding headers/docstrings/comments."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return 0
+    docstring_lines = _docstring_lines(tree)
+    header_lines = _header_lines(tree)
+    excluded = docstring_lines | header_lines
+    lines: set[int] = set()
+    stream = io.StringIO(source).readline
+    for tok in tokenize.generate_tokens(stream):
+        if tok.type in {
+            token.ENCODING,
+            token.NL,
+            token.NEWLINE,
+            token.INDENT,
+            token.DEDENT,
+            token.COMMENT,
+            token.ENDMARKER,
+        }:
+            continue
+        if tok.start[0] in excluded:
+            continue
+        lines.add(tok.start[0])
+    return len(lines)
+
+
+def _docstring_lines(tree: ast.AST) -> set[int]:
+    lines: set[int] = set()
+    for node in ast.walk(tree):
+        body = getattr(node, "body", None)
+        if not isinstance(body, list) or not body:
+            continue
+        first = body[0]
+        if not isinstance(first, ast.Expr):
+            continue
+        value = first.value
+        if not isinstance(value, ast.Constant) or not isinstance(value.value, str):
+            continue
+        start = getattr(first, "lineno", 0)
+        end = getattr(first, "end_lineno", start)
+        lines.update(range(start, end + 1))
+    return lines
+
+
+def _header_lines(tree: ast.AST) -> set[int]:
+    lines: set[int] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        start = getattr(node, "lineno", 0)
+        if not start:
+            continue
+        body = getattr(node, "body", [])
+        first_body_line = getattr(body[0], "lineno", start + 1) if body else start + 1
+        end = max(start, first_body_line - 1)
+        lines.update(range(start, end + 1))
+    return lines
 
 
 def _find_source_roots(root: Path) -> list[Path]:

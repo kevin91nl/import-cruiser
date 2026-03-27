@@ -9,12 +9,14 @@ from pathlib import Path
 
 from import_cruiser.analyzer import (
     Analyzer,
+    _count_loc,
     _collect_http_hosts,
     _http_host_from_text,
     _http_host_from_expr,
     _is_url_like_target,
     _render_joined_str,
     _collect_imports,
+    _header_lines,
     _module_name_from_path,
 )
 
@@ -332,3 +334,44 @@ def test_render_joined_str_and_url_target_edges() -> None:
             ctx=ast.Load(),
         )
     )
+
+
+def test_count_loc_excludes_headers_docstrings_and_comments() -> None:
+    source = (
+        '"""module doc"""\n'
+        "import os\n"
+        "\n"
+        "class A:\n"
+        '    """class doc"""\n'
+        "    def run(self):\n"
+        '        """fn doc"""\n'
+        "        # comment\n"
+        "        x = 1\n"
+        "        if x:\n"
+        "            y = 2\n"
+        "        return y\n"
+    )
+    assert _count_loc(source) == 5
+
+
+def test_count_loc_returns_zero_for_invalid_python() -> None:
+    assert _count_loc("def broken(:\n    pass\n") == 0
+
+
+def test_header_lines_skips_nodes_without_start_line() -> None:
+    function_node = ast.FunctionDef(
+        name="f",
+        args=ast.arguments(
+            posonlyargs=[],
+            args=[],
+            kwonlyargs=[],
+            kw_defaults=[],
+            defaults=[],
+        ),
+        body=[ast.Pass(lineno=2, col_offset=0)],
+        decorator_list=[],
+        lineno=0,
+        col_offset=0,
+    )
+    module = ast.Module(body=[function_node], type_ignores=[])
+    assert _header_lines(module) == set()
