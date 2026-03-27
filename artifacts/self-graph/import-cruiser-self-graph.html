@@ -271,6 +271,7 @@
         <span class="badge" id="search-count">0 matches</span>
         <span class="spacer"></span>
         <span class="badge" id="repo-badge">Repos: detecting…</span>
+        <span class="badge" id="loc-badge" style="display:none">LOC: 0</span>
     </div>
     <div class="canvas" id="canvas">
         <div class="viewport" id="viewport"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
@@ -435,6 +436,7 @@
         const searchInput = document.getElementById('search');
         const searchCount = document.getElementById('search-count');
         const repoBadge = document.getElementById('repo-badge');
+        const locBadge = document.getElementById('loc-badge');
         const initialViewBox = svg?.getAttribute('viewBox') || '';
         let scale = 1;
         let originX = 0;
@@ -482,6 +484,8 @@
         const DOUBLE_CLICK_MS = 320;
         let reviewMode = false;
         let reviewSummary = null;
+        const showLocEnabled = false;
+        const totalLoc = 2559;
 
         clusterGroups.forEach((cluster) => {
             const raw = titleOf(cluster);
@@ -538,6 +542,10 @@
             repoBadge.textContent = `Packages: ${packageRoots.size}`;
         } else {
             repoBadge.textContent = 'Repos: unknown';
+        }
+        if (showLocEnabled) {
+            locBadge.style.display = 'inline-block';
+            locBadge.textContent = `LOC: ${totalLoc}`;
         }
 
         edgeGroups.forEach((edge) => {

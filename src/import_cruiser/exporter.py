@@ -402,6 +402,7 @@ def export_html(
     edge_mode: str = "node",
     show_loc: bool = False,
 ) -> str:
+    total_loc = sum(module.loc for module in graph.modules)
     dot = export_dot(
         graph,
         graph_name=graph_name,
@@ -430,7 +431,12 @@ def export_html(
                 show_loc=show_loc,
             )
         )
-        body = _html_with_svg(svg, graph_name)
+        body = _html_with_svg(
+            svg,
+            graph_name,
+            show_loc=show_loc,
+            total_loc=total_loc,
+        )
     except RuntimeError as exc:
         body = _html_with_fallback(dot, graph_name, str(exc))
     return body
@@ -1039,8 +1045,15 @@ def _add_svg_padding(svg: str, padding: int = 8) -> str:
     return svg
 
 
-def _html_with_svg(svg: str, title: str) -> str:
+def _html_with_svg(
+    svg: str,
+    title: str,
+    *,
+    show_loc: bool,
+    total_loc: int,
+) -> str:
     display_title = _display_graph_title(title)
+    show_loc_js = "true" if show_loc else "false"
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -1314,6 +1327,7 @@ def _html_with_svg(svg: str, title: str) -> str:
         <span class="badge" id="search-count">0 matches</span>
         <span class="spacer"></span>
         <span class="badge" id="repo-badge">Repos: detecting…</span>
+        <span class="badge" id="loc-badge" style="display:none">LOC: 0</span>
     </div>
     <div class="canvas" id="canvas">
         <div class="viewport" id="viewport">{svg}</div>
@@ -1332,6 +1346,7 @@ def _html_with_svg(svg: str, title: str) -> str:
         const searchInput = document.getElementById('search');
         const searchCount = document.getElementById('search-count');
         const repoBadge = document.getElementById('repo-badge');
+        const locBadge = document.getElementById('loc-badge');
         const initialViewBox = svg?.getAttribute('viewBox') || '';
         let scale = 1;
         let originX = 0;
@@ -1379,6 +1394,8 @@ def _html_with_svg(svg: str, title: str) -> str:
         const DOUBLE_CLICK_MS = 320;
         let reviewMode = false;
         let reviewSummary = null;
+        const showLocEnabled = {show_loc_js};
+        const totalLoc = {total_loc};
 
         clusterGroups.forEach((cluster) => {{
             const raw = titleOf(cluster);
@@ -1435,6 +1452,10 @@ def _html_with_svg(svg: str, title: str) -> str:
             repoBadge.textContent = `Packages: ${{packageRoots.size}}`;
         }} else {{
             repoBadge.textContent = 'Repos: unknown';
+        }}
+        if (showLocEnabled) {{
+            locBadge.style.display = 'inline-block';
+            locBadge.textContent = `LOC: ${{totalLoc}}`;
         }}
 
         edgeGroups.forEach((edge) => {{

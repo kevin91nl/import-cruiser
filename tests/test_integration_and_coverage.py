@@ -494,7 +494,17 @@ def test_exporter_error_and_style_paths(monkeypatch: pytest.MonkeyPatch) -> None
         lambda *a, **k: "<svg/>",
     )
     assert export_svg(graph) == "<svg/>"
-    assert "<svg/>" in export_html(graph)
+    html_default = export_html(graph)
+    assert "<svg/>" in html_default
+    assert "const showLocEnabled = false;" in html_default
+
+    loc_graph = DependencyGraph()
+    loc_graph.add_module(Module(name="pkg.a", path="/tmp/pkg/a.py", loc=3))
+    loc_graph.add_module(Module(name="pkg.b", path="/tmp/pkg/b.py", loc=5))
+    loc_graph.add_dependency(Dependency(source="pkg.a", target="pkg.b", line=1))
+    html_with_loc = export_html(loc_graph, show_loc=True)
+    assert "const showLocEnabled = true;" in html_with_loc
+    assert "const totalLoc = 8;" in html_with_loc
 
     render_calls: list[str] = []
 
