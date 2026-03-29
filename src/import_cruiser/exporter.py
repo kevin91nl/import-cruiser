@@ -1360,8 +1360,11 @@ def _html_with_svg(
                 node.querySelector('a')?.getAttribute('title') ||
                 '';
             node.dataset.path = path;
-            if (path.includes('/riskstudio-worker/')) repos.add('riskstudio-worker');
-            if (path.includes('/riskstudio-sdk/')) repos.add('riskstudio-sdk');
+            const pathParts = path.split('/').filter(Boolean);
+            const srcIndex = pathParts.lastIndexOf('src');
+            if (srcIndex > 0) {{
+                repos.add(pathParts[srcIndex - 1]);
+            }}
 
             const parts = name.split('/').filter(Boolean);
             const clusterChain = [];
