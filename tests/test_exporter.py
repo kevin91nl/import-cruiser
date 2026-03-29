@@ -110,6 +110,16 @@ class TestExportDot:
         assert "digraph" in result
         assert "->" not in result
 
+    def test_show_loc_adds_loc_to_labels(self) -> None:
+        graph = DependencyGraph()
+        graph.add_module(Module(name="a", path="a.py", loc=7))
+        graph.add_module(Module(name="b", path="b.py", loc=3))
+        graph.add_dependency(Dependency(source="a", target="b", line=1))
+
+        result = export_dot(graph, style="default", show_loc=True)
+        assert "a.py [7 LOC]" in result
+        assert "b.py [3 LOC]" in result
+
     def test_cluster_edges_for_path_mode_use_real_paths(self) -> None:
         graph = Analyzer(COMPLEX_FIXTURE_ROOT).analyze()
         filtered = filter_graph(

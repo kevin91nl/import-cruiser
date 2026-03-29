@@ -321,6 +321,21 @@ class TestExportCommand:
         assert out_file.exists()
         assert "digraph" in out_file.read_text()
 
+    def test_export_show_loc_includes_loc_labels(self, sample_project: Path) -> None:
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "export",
+                str(sample_project),
+                "--format",
+                "dot",
+                "--show-loc",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "LOC]" in result.output
+
     def test_export_cruiser_auto_uses_node_edges(self, tmp_path: Path) -> None:
         pkg = tmp_path / "src" / "mypkg"
         (pkg / "app").mkdir(parents=True)

@@ -106,6 +106,17 @@ class TestGraphFiltering:
         filtered = filter_graph(g, include_paths=[r"/private/tmp/repo/src/"])
         assert {m.name for m in filtered.modules} == {"a"}
 
+    def test_filter_graph_preserves_loc(self) -> None:
+        g = DependencyGraph()
+        g.add_module(Module(name="a", path="/repo/src/a.py", loc=11))
+        g.add_module(Module(name="b", path="/repo/src/b.py", loc=5))
+        g.add_dependency(Dependency(source="a", target="b"))
+
+        filtered = filter_graph(g, include=[r"^a$"])
+        module = filtered.get_module("a")
+        assert module is not None
+        assert module.loc == 11
+
 
 class TestGraphCollapse:
     def test_collapse_depth(self) -> None:
@@ -113,6 +124,20 @@ class TestGraphCollapse:
         collapsed = collapse_graph(g, depth=1)
         assert {m.name for m in collapsed.modules} == {"pkg", "other"}
         assert set(collapsed.edges()) == {("pkg", "other")}
+
+    def test_collapse_depth_aggregates_loc(self) -> None:
+        g = DependencyGraph()
+        g.add_module(Module(name="pkg.a", path="/repo/pkg/a.py", loc=4))
+        g.add_module(Module(name="pkg.b", path="/repo/pkg/b.py", loc=6))
+        g.add_module(Module(name="other.c", path="/repo/other/c.py", loc=3))
+        g.add_dependency(Dependency(source="pkg.a", target="other.c"))
+        g.add_dependency(Dependency(source="pkg.b", target="other.c"))
+
+        collapsed = collapse_graph(g, depth=1)
+        pkg = collapsed.get_module("pkg")
+        other = collapsed.get_module("other")
+        assert pkg is not None and pkg.loc == 10
+        assert other is not None and other.loc == 3
 
 
 class TestPruneOrphanInitModules:

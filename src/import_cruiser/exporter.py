@@ -93,6 +93,7 @@ def export_dot(
     cluster_mode: str = "path",
     style: str = "depcruise",
     edge_mode: str = "node",
+    show_loc: bool = False,
 ) -> str:
     """Return a DOT-format string representing the dependency graph."""
     if violations is None:
@@ -129,6 +130,7 @@ def export_dot(
             node_id_map=node_id_map,
             path_root=path_root,
             external_anchor_parts=external_anchor_parts,
+            show_loc=show_loc,
         )
     else:
         node_to_cluster, cluster_index = _append_standard_nodes(
@@ -139,6 +141,7 @@ def export_dot(
             cluster_mode=cluster_mode,
             style=style,
             path_root=path_root,
+            show_loc=show_loc,
         )
 
     if not depcruise and edge_mode == "cluster" and cluster_depth > 0:
@@ -195,6 +198,7 @@ def _append_depcruise_nodes(
     node_id_map: dict[str, str],
     path_root: str | None,
     external_anchor_parts: dict[str, list[str]],
+    show_loc: bool,
 ) -> None:
     for module in sorted(modules, key=lambda m: m.name):
         node_id = _depcruise_node_id(
@@ -209,6 +213,7 @@ def _append_depcruise_nodes(
                 node_id,
                 path_root,
                 external_anchor_parts=external_anchor_parts,
+                show_loc=show_loc,
             )
         )
     if modules:
@@ -223,6 +228,7 @@ def _append_standard_nodes(
     cluster_mode: str,
     style: str,
     path_root: str | None,
+    show_loc: bool,
 ) -> tuple[dict[str, str], dict[str, list[str]]]:
     cluster_index: dict[str, list[str]] = {}
     node_to_cluster: dict[str, str] = {}
@@ -233,6 +239,16 @@ def _append_standard_nodes(
             modules, cluster_depth, cluster_mode
         )
         non_empty_clusters = _non_empty_clusters(flat_clusters)
+        cluster_loc_totals = (
+            _cluster_loc_totals(
+                modules=modules,
+                cluster_mode=cluster_mode,
+                cluster_depth=cluster_depth,
+                path_root=path_root,
+            )
+            if show_loc
+            else {}
+        )
         lines.extend(
             _render_cluster_tree(
                 root_clusters,
@@ -242,6 +258,8 @@ def _append_standard_nodes(
                 mode=cluster_mode,
                 allowed=non_empty_clusters,
                 style=style,
+                show_loc=show_loc,
+                cluster_loc_totals=cluster_loc_totals,
             )
         )
         for module in modules:
@@ -265,7 +283,7 @@ def _append_standard_nodes(
                 module.path,
                 module.name in cycle_nodes,
                 indent="    ",
-                label=_leaf_label(module, cluster_mode),
+                label=_leaf_label(module, cluster_mode, show_loc),
             )
         )
 
@@ -344,6 +362,7 @@ def export_svg(
     cluster_mode: str = "path",
     style: str = "depcruise",
     edge_mode: str = "node",
+    show_loc: bool = False,
 ) -> str:
     dot = export_dot(
         graph,
@@ -354,6 +373,7 @@ def export_svg(
         cluster_mode=cluster_mode,
         style=style,
         edge_mode=edge_mode,
+        show_loc=show_loc,
     )
     svg = _render_with_edge_fallback(
         dot=dot,
@@ -367,6 +387,7 @@ def export_svg(
         cluster_mode=cluster_mode,
         style=style,
         edge_mode=edge_mode,
+        show_loc=show_loc,
     )
     return _add_svg_padding(svg)
 
@@ -381,6 +402,7 @@ def export_html(
     cluster_mode: str = "path",
     style: str = "depcruise",
     edge_mode: str = "node",
+    show_loc: bool = False,
     generation_command: str | None = None,
 ) -> str:
     dot = export_dot(
@@ -392,6 +414,7 @@ def export_html(
         cluster_mode=cluster_mode,
         style=style,
         edge_mode=edge_mode,
+        show_loc=show_loc,
     )
     try:
         svg = _add_svg_padding(
@@ -407,6 +430,7 @@ def export_html(
                 cluster_mode=cluster_mode,
                 style=style,
                 edge_mode=edge_mode,
+                show_loc=show_loc,
             )
         )
         body = _html_with_svg(svg, graph_name, generation_command)
@@ -428,6 +452,7 @@ def _render_with_edge_fallback(
     cluster_mode: str,
     style: str,
     edge_mode: str,
+    show_loc: bool,
 ) -> str:
     try:
         return _render_dot(dot, fmt, engine=engine)
@@ -443,6 +468,7 @@ def _render_with_edge_fallback(
             cluster_mode=cluster_mode,
             style=style,
             edge_mode="node",
+            show_loc=show_loc,
         )
         try:
             return _render_dot(cluster_safe_dot, fmt, engine=engine)
@@ -479,9 +505,12 @@ def _depcruise_cluster_line(
     node_id: str,
     root: str | None,
     external_anchor_parts: dict[str, list[str]] | None = None,
+    show_loc: bool = False,
 ) -> str:
     rel_path = node_id if module.path else module.name
     label = Path(module.path).name if module.path else module.name
+    if show_loc:
+        label = _label_with_loc(label, module.loc)
     attrs = _depcruise_node_attrs(module, label, rel_path)
     parts: list[str] = []
     if module.path:
@@ -600,6 +629,8 @@ def _render_cluster_tree(
     mode: str,
     allowed: set[str],
     style: str,
+    show_loc: bool = False,
+    cluster_loc_totals: dict[str, int] | None = None,
 ) -> list[str]:
     lines: list[str] = []
 
@@ -611,7 +642,10 @@ def _render_cluster_tree(
             return
         cid = _cluster_id(cluster["id"])
         lines.append(f'{level_indent}subgraph "cluster_{cid}" {{')
-        lines.append(f'{level_indent}    label="{cluster["label"]}";')
+        label = cluster["label"]
+        if show_loc and cluster_loc_totals is not None:
+            label = _label_with_loc(label, cluster_loc_totals.get(cluster["id"], 0))
+        lines.append(f'{level_indent}    label="{label}";')
         if style != "depcruise":
             lines.append(f"{level_indent}    margin=6;")
             lines.append(f'{level_indent}    color="black";')
@@ -640,7 +674,7 @@ def _render_cluster_tree(
                     module.path,
                     module.name in cycle_nodes,
                     indent=level_indent + "    ",
-                    label=_leaf_label(module, mode),
+                    label=_leaf_label(module, mode, show_loc),
                 )
             )
 
@@ -687,10 +721,42 @@ def _clusters_related(a: str, b: str) -> bool:
     return a.startswith(b + ".") or b.startswith(a + ".")
 
 
-def _leaf_label(module, mode: str) -> str:
+def _leaf_label(module: Module, mode: str, show_loc: bool = False) -> str:
     if mode == "path":
-        return Path(module.path).name
-    return module.name.split(".")[-1]
+        label = Path(module.path).name
+    else:
+        label = module.name.split(".")[-1]
+    if show_loc:
+        return _label_with_loc(label, module.loc)
+    return label
+
+
+def _label_with_loc(label: str, loc: int) -> str:
+    return f"{label} [{loc} LOC]"
+
+
+def _cluster_loc_totals(
+    modules: list[Module],
+    cluster_mode: str,
+    cluster_depth: int,
+    path_root: str | None,
+) -> dict[str, int]:
+    totals: dict[str, int] = {}
+    for module in modules:
+        cluster_key = _node_cluster_key(
+            module.name,
+            module.path,
+            cluster_mode,
+            cluster_depth,
+            path_root,
+        )
+        if not cluster_key:
+            continue
+        parts = cluster_key.split(".")
+        for idx in range(1, len(parts) + 1):
+            partial_key = ".".join(parts[:idx])
+            totals[partial_key] = totals.get(partial_key, 0) + module.loc
+    return totals
 
 
 def _node_cluster_key(
