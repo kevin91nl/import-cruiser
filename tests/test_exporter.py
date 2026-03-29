@@ -9,7 +9,9 @@ from pathlib import Path
 from import_cruiser.analyzer import Analyzer
 from import_cruiser.exporter import (
     _common_prefix,
+    _common_root,
     _depcruise_cluster_line,
+    _depcruise_cluster_loc_totals,
     _depcruise_node_id,
     _external_anchor_parts,
     _is_http_external_node,
@@ -190,6 +192,23 @@ class TestExportDot:
         assert '"src/pkg/a.py"' in result
         assert 'URL="src/pkg/a.py"' in result
         assert '"src/pkg/a.py" -> "src/pkg/b.py"' in result
+
+    def test_depcruise_show_loc_adds_cluster_loc_totals(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "src" / "pkg"
+        pkg.mkdir(parents=True)
+        (pkg / "a.py").write_text("import pkg.b\n")
+        (pkg / "b.py").write_text("x = 1\n")
+
+        graph = Analyzer(tmp_path).analyze()
+        result = export_dot(graph, style="depcruise", show_loc=True)
+        cluster_totals = _depcruise_cluster_loc_totals(
+            graph.modules,
+            _common_root(graph.modules),
+        )
+        src_loc = cluster_totals.get("src", 0)
+        pkg_loc = cluster_totals.get("src/pkg", 0)
+        assert f'label="src [{src_loc} LOC]"' in result
+        assert f'label="pkg [{pkg_loc} LOC]"' in result
 
     def test_depcruise_falls_back_to_module_names(self) -> None:
         graph = DependencyGraph()

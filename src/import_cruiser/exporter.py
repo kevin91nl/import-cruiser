@@ -200,6 +200,9 @@ def _append_depcruise_nodes(
     external_anchor_parts: dict[str, list[str]],
     show_loc: bool,
 ) -> None:
+    cluster_loc_totals = (
+        _depcruise_cluster_loc_totals(modules, path_root) if show_loc else {}
+    )
     for module in sorted(modules, key=lambda m: m.name):
         node_id = _depcruise_node_id(
             module,
@@ -214,6 +217,7 @@ def _append_depcruise_nodes(
                 path_root,
                 external_anchor_parts=external_anchor_parts,
                 show_loc=show_loc,
+                cluster_loc_totals=cluster_loc_totals,
             )
         )
     if modules:
@@ -506,6 +510,7 @@ def _depcruise_cluster_line(
     root: str | None,
     external_anchor_parts: dict[str, list[str]] | None = None,
     show_loc: bool = False,
+    cluster_loc_totals: dict[str, int] | None = None,
 ) -> str:
     rel_path = node_id if module.path else module.name
     label = Path(module.path).name if module.path else module.name
@@ -527,11 +532,17 @@ def _depcruise_cluster_line(
     if not parts:
         return f"    {_dot_id(node_id)} [{attrs} ]"
 
-    line = f'    subgraph "cluster_{parts[0]}" {{label="{parts[0]}" '
+    root_label = parts[0]
+    if show_loc and cluster_loc_totals is not None:
+        root_label = _label_with_loc(root_label, cluster_loc_totals.get(parts[0], 0))
+    line = f'    subgraph "cluster_{parts[0]}" {{label="{root_label}" '
     prefix = parts[0]
     for part in parts[1:]:
         prefix = f"{prefix}/{part}"
-        line += f'subgraph "cluster_{prefix}" {{label="{part}" '
+        part_label = part
+        if show_loc and cluster_loc_totals is not None:
+            part_label = _label_with_loc(part, cluster_loc_totals.get(prefix, 0))
+        line += f'subgraph "cluster_{prefix}" {{label="{part_label}" '
 
     line += f"{_dot_id(node_id)} [{attrs} ] "
     line += "}" * len(parts)
@@ -733,6 +744,31 @@ def _leaf_label(module: Module, mode: str, show_loc: bool = False) -> str:
 
 def _label_with_loc(label: str, loc: int) -> str:
     return f"{label} [{loc} LOC]"
+
+
+def _depcruise_cluster_loc_totals(
+    modules: list[Module],
+    root: str | None,
+) -> dict[str, int]:
+    totals: dict[str, int] = {}
+    for module in modules:
+        if not module.path:
+            continue
+        try:
+            path = Path(module.path).resolve()
+            if root:
+                path = path.relative_to(root)
+            parts = list(path.parts[:-1])
+        except ValueError:
+            parts = list(Path(module.path).parts[:-1])
+        if not parts:
+            continue
+        prefix = parts[0]
+        totals[prefix] = totals.get(prefix, 0) + module.loc
+        for part in parts[1:]:
+            prefix = f"{prefix}/{part}"
+            totals[prefix] = totals.get(prefix, 0) + module.loc
+    return totals
 
 
 def _cluster_loc_totals(
@@ -1712,9 +1748,12 @@ def _html_with_svg(
             }});
         }};
 
+        const displayNameOf = (name) =>
+            nodeByName.get(name)?.querySelector('text')?.textContent?.trim() || name;
+
         const _nodeRefList = (items) =>
             `<ul>${{items.map((item) =>
-                `<li><button type="button" class="node-ref" data-node-ref="${{esc(item)}}">${{esc(item)}}</button></li>`
+                `<li><button type="button" class="node-ref" data-node-ref="${{esc(item)}}">${{esc(displayNameOf(item))}}</button></li>`
             ).join('')}}</ul>`;
 
         const renderArchitectureReview = () => {{
@@ -1835,7 +1874,7 @@ def _html_with_svg(
                 : '';
 
             inspector.innerHTML = `
-                <h4>${{esc(name)}}</h4>
+                <h4>${{esc(displayNameOf(name))}}</h4>
                 ${{pinBadge}}
                 <div><strong>Outgoing</strong> (${{out.length}})</div>
                 ${{outList}}
@@ -1882,7 +1921,7 @@ def _html_with_svg(
                 ? '<div class="muted"><strong>Pinned</strong> · transitief (parents + children, recursief)</div>'
                 : '';
             inspector.innerHTML = `
-                <h4>${{esc(name)}}</h4>
+                <h4>${{esc(displayNameOf(name))}}</h4>
                 ${{pinBadge}}
                 <div><strong>Transitive context</strong></div>
                 <div>Nodes: ${{activeNames.size}}</div>
