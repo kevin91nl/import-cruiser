@@ -15,6 +15,21 @@ from pathlib import Path
 from import_cruiser.graph import Dependency, DependencyGraph, Module
 
 
+_SKIP_DIR_NAMES: frozenset[str] = frozenset(
+    {
+        "__pycache__",
+        "node_modules",
+        "dist",
+        "build",
+        "target",
+        "htmlcov",
+        "coverage",
+        "vendor",
+        "site-packages",
+    }
+)
+
+
 def _module_name_from_path(
     path: Path, base: Path, normalize_hyphens: bool = True
 ) -> str:
@@ -32,6 +47,33 @@ def _module_name_from_path(
 
 def _collect_imports(source: str, module_name: str) -> list[tuple[str, int]]:
     """Return list of (import_name, line_no) extracted from *source*."""
+    tree = _parse_tree(source)
+    if tree is None:
+        return []
+
+    imports = _collect_imports_from_tree(tree, module_name)
+    if imports:
+        return imports
+
+    return _collect_imports_fallback(source, module_name)
+
+
+def _collect_imports_and_loc(
+    source: str, module_name: str
+) -> tuple[list[tuple[str, int]], int]:
+    tree = _parse_tree(source)
+    if tree is None:
+        return [], 0
+
+    imports = _collect_imports_from_tree(tree, module_name)
+    if not imports:
+        imports = _collect_imports_fallback(source, module_name)
+
+    loc = _count_loc_with_tree(source, tree)
+    return imports, loc
+
+
+def _parse_tree(source: str) -> ast.AST | None:
     try:
         # Some real-world files trigger SyntaxWarning (e.g. invalid escape
         # sequences in strings); keep CLI output quiet by default.
@@ -39,9 +81,15 @@ def _collect_imports(source: str, module_name: str) -> list[tuple[str, int]]:
             warnings.simplefilter("ignore", SyntaxWarning)
             tree = ast.parse(source)
     except SyntaxError:
-        return []
+        return None
+    return tree
 
+
+def _collect_imports_from_tree(
+    tree: ast.AST, module_name: str
+) -> list[tuple[str, int]]:
     imports: list[tuple[str, int]] = []
+
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
@@ -75,10 +123,12 @@ def _collect_imports(source: str, module_name: str) -> list[tuple[str, int]]:
                         )
                         imports.append((resolved, node.lineno))
 
-    if imports:
-        return imports
+    return imports
 
+
+def _collect_imports_fallback(source: str, module_name: str) -> list[tuple[str, int]]:
     parts = module_name.split(".")
+    imports: list[tuple[str, int]] = []
     for lineno, line in enumerate(source.splitlines(), start=1):
         stripped = line.strip()
         if not stripped.startswith("from ") or " import " not in stripped:
@@ -106,7 +156,7 @@ def _iter_python_files(
     for dirpath, dirnames, filenames in os.walk(directory):
         # Skip hidden directories and common noise
         dirnames[:] = [
-            d for d in dirnames if not d.startswith(".") and d not in ("__pycache__",)
+            d for d in dirnames if not d.startswith(".") and d not in _SKIP_DIR_NAMES
         ]
         for filename in filenames:
             if filename.endswith(".py"):
@@ -155,31 +205,28 @@ class Analyzer:
             include_paths=self.include_paths or None,
             exclude_paths=self.exclude_paths or None,
         )
-        source_roots = _find_source_roots(self.root)
 
-        # First pass: register all modules
+        # First pass: register all modules (cheap: names only)
         module_map: dict[str, Path] = {}
-        source_map: dict[str, str] = {}
         for py_file in py_files:
-            base = _select_source_root(py_file, source_roots) or self.root
+            base = _source_root_for_file(py_file, self.root) or self.root
             mod_name = _module_name_from_path(
                 py_file,
                 base,
                 self.normalize_hyphens,
             )
-            source = py_file.read_text(encoding="utf-8", errors="replace")
             module_map[mod_name] = py_file
-            source_map[mod_name] = source
-            graph.add_module(
-                Module(name=mod_name, path=str(py_file), loc=_count_loc(source))
-            )
+            graph.add_module(Module(name=mod_name, path=str(py_file), loc=0))
 
         known_modules = set(module_map.keys())
 
         # Second pass: resolve imports → edges
         for mod_name, py_file in module_map.items():
-            source = source_map.get(mod_name, "")
-            raw_imports = _collect_imports(source, mod_name)
+            source = py_file.read_text(encoding="utf-8", errors="replace")
+            raw_imports, loc = _collect_imports_and_loc(source, mod_name)
+            module = graph.get_module(mod_name)
+            if module is not None:
+                module.loc = loc
             for imported, lineno in raw_imports:
                 # Only keep dependencies that are internal to the project
                 target = _resolve_internal(imported, known_modules)
@@ -211,6 +258,15 @@ class Analyzer:
                 )
 
         return graph
+
+
+def _source_root_for_file(path: Path, root: Path) -> Path | None:
+    candidates = [parent for parent in path.parents if parent.name == "src"]
+    scoped = [candidate for candidate in candidates if path.is_relative_to(candidate)]
+    scoped = [candidate for candidate in scoped if candidate.is_relative_to(root)]
+    if not scoped:
+        return None
+    return max(scoped, key=lambda candidate: len(candidate.parts))
 
 
 def _resolve_internal(imported: str, known_modules: set[str]) -> str | None:
@@ -379,10 +435,13 @@ def _is_url_like_target(target: ast.expr) -> bool:
 
 def _count_loc(source: str) -> int:
     """Count executable code lines excluding headers/docstrings/comments."""
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
+    tree = _parse_tree(source)
+    if tree is None:
         return 0
+    return _count_loc_with_tree(source, tree)
+
+
+def _count_loc_with_tree(source: str, tree: ast.AST) -> int:
     docstring_lines = _docstring_lines(tree)
     header_lines = _header_lines(tree)
     excluded = docstring_lines | header_lines
@@ -438,25 +497,8 @@ def _header_lines(tree: ast.AST) -> set[int]:
     return lines
 
 
-def _find_source_roots(root: Path) -> list[Path]:
-    roots: list[Path] = []
-    for dirpath, dirnames, filenames in os.walk(root):
-        if os.path.basename(dirpath) == "src":
-            src_path = Path(dirpath).absolute()
-            if _contains_python_files(src_path):
-                roots.append(src_path)
-    return roots
-
-
 def _contains_python_files(directory: Path) -> bool:
     for dirpath, _, filenames in os.walk(directory):
         if any(name.endswith(".py") for name in filenames):
             return True
     return False
-
-
-def _select_source_root(path: Path, roots: list[Path]) -> Path | None:
-    candidates = [r for r in roots if path.is_relative_to(r)]
-    if not candidates:
-        return None
-    return max(candidates, key=lambda p: len(p.parts))
