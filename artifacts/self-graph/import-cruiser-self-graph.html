@@ -145,6 +145,38 @@
             display: flex;
             align-items: center;
             gap: 12px;
+            overflow: hidden;
+        }
+        .footer .spacer {
+            flex: 1;
+        }
+        .footer .muted {
+            color: #6b7280;
+            white-space: nowrap;
+        }
+        .footer code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 10px;
+            background: #f9fafb;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            padding: 2px 6px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 52vw;
+        }
+        .footer button {
+            height: 22px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            background: #ffffff;
+            font-size: 11px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .footer button:hover {
+            background: #f9fafb;
         }
         svg.focus-mode g.node,
         svg.focus-mode g.edge {
@@ -271,7 +303,6 @@
         <span class="badge" id="search-count">0 matches</span>
         <span class="spacer"></span>
         <span class="badge" id="repo-badge">Repos: detecting…</span>
-        <span class="badge" id="loc-badge" style="display:none">LOC: 0</span>
     </div>
     <div class="canvas" id="canvas">
         <div class="viewport" id="viewport"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
@@ -426,17 +457,26 @@
             <div class="muted">Click a node or edge to pin details.</div>
         </aside>
     </div>
-    <div class="footer" id="footer">Ready</div>
+    <div class="footer" id="footer">
+        <span id="footer-status">Ready</span>
+        <span class="spacer"></span>
+        <span class="muted" id="render-command-label">Generated with:</span>
+        <code id="render-command"></code>
+        <button id="btn-copy-command" title="Copy generation command">Copy</button>
+    </div>
     <script>
         const canvas = document.getElementById('canvas');
         const viewport = document.getElementById('viewport');
         const svg = viewport.querySelector('svg');
         const inspector = document.getElementById('inspector');
-        const footer = document.getElementById('footer');
+        const footerStatus = document.getElementById('footer-status');
+        const commandLabel = document.getElementById('render-command-label');
+        const commandText = document.getElementById('render-command');
+        const copyCommandButton = document.getElementById('btn-copy-command');
         const searchInput = document.getElementById('search');
         const searchCount = document.getElementById('search-count');
         const repoBadge = document.getElementById('repo-badge');
-        const locBadge = document.getElementById('loc-badge');
+        const generationCommand = "/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python -m import_cruiser.cli export . --format html --include-path src/import_cruiser/ --exclude-path '__init__\\.py$|/tests/' --output artifacts/self-graph/import-cruiser-self-graph.html";
         const initialViewBox = svg?.getAttribute('viewBox') || '';
         let scale = 1;
         let originX = 0;
@@ -484,8 +524,6 @@
         const DOUBLE_CLICK_MS = 320;
         let reviewMode = false;
         let reviewSummary = null;
-        const showLocEnabled = false;
-        const totalLoc = 2559;
 
         clusterGroups.forEach((cluster) => {
             const raw = titleOf(cluster);
@@ -542,10 +580,6 @@
             repoBadge.textContent = `Packages: ${packageRoots.size}`;
         } else {
             repoBadge.textContent = 'Repos: unknown';
-        }
-        if (showLocEnabled) {
-            locBadge.style.display = 'inline-block';
-            locBadge.textContent = `LOC: ${totalLoc}`;
         }
 
         edgeGroups.forEach((edge) => {
@@ -691,11 +725,39 @@
         const applyTransform = () => {
             viewport.style.transform =
                 `translate(${originX}px, ${originY}px) scale(${scale})`;
-            footer.textContent =
+            footerStatus.textContent =
                 `Nodes: ${nodeGroups.length} · ` +
                 `Edges: ${edgeGroups.length} · ` +
                 `Zoom: ${Math.round(scale * 100)}%`;
         };
+
+        const copyGenerationCommand = async () => {
+            if (!generationCommand) return;
+            try {
+                await navigator.clipboard.writeText(generationCommand);
+            } catch (_error) {
+                const tmp = document.createElement('textarea');
+                tmp.value = generationCommand;
+                document.body.appendChild(tmp);
+                tmp.select();
+                document.execCommand('copy');
+                tmp.remove();
+            }
+            const oldLabel = copyCommandButton.textContent;
+            copyCommandButton.textContent = 'Copied';
+            window.setTimeout(() => {
+                copyCommandButton.textContent = oldLabel;
+            }, 1000);
+        };
+
+        if (generationCommand) {
+            commandText.textContent = generationCommand;
+            copyCommandButton.addEventListener('click', copyGenerationCommand);
+        } else {
+            commandLabel.style.display = 'none';
+            commandText.style.display = 'none';
+            copyCommandButton.style.display = 'none';
+        }
 
         const fitToView = () => {
             if (!svg || !svg.viewBox || !svg.viewBox.baseVal) return;

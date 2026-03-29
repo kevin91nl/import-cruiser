@@ -17,8 +17,8 @@ class Module:
 
     name: str
     path: str
-    imports: list[str] = field(default_factory=list)
     loc: int = 0
+    imports: list[str] = field(default_factory=list)
 
     def __hash__(self) -> int:
         return hash(self.name)
@@ -188,13 +188,8 @@ def collapse_graph(graph: DependencyGraph, depth: int) -> DependencyGraph:
     for module in graph.modules:
         collapsed_name = _collapse_name(module.name, depth)
         name_map[module.name] = collapsed_name
-        existing = collapsed.get_module(collapsed_name)
-        if existing is None:
-            collapsed.add_module(
-                Module(name=collapsed_name, path=module.path, loc=module.loc)
-            )
-        else:
-            existing.loc += module.loc
+        if collapsed.get_module(collapsed_name) is None:
+            collapsed.add_module(Module(name=collapsed_name, path=module.path))
 
     for dep in graph.dependencies:
         src = name_map.get(dep.source)
@@ -254,7 +249,6 @@ def aggregate_by_path(
     aggregated = DependencyGraph()
     group_map: dict[str, str] = {}
     group_path_map: dict[str, str] = {}
-    group_loc_map: dict[str, int] = {}
 
     for module in graph.modules:
         group_key = _group_key(module.path, root, depth)
@@ -265,10 +259,8 @@ def aggregate_by_path(
             leaf_key = os.path.join(group_key, filename)
             group_map[module.name] = leaf_key
             group_path_map.setdefault(leaf_key, module.path)
-            group_loc_map[leaf_key] = group_loc_map.get(leaf_key, 0) + module.loc
         else:
             group_map[module.name] = group_key
-            group_loc_map[group_key] = group_loc_map.get(group_key, 0) + module.loc
             if group_key not in group_path_map:
                 group_dir = Path(root) / Path(group_key)
                 init_path = group_dir / "__init__.py"
@@ -279,9 +271,7 @@ def aggregate_by_path(
                     group_path_map[group_key] = str(init_path)
 
     for group_key, path in group_path_map.items():
-        aggregated.add_module(
-            Module(name=group_key, path=path, loc=group_loc_map.get(group_key, 0))
-        )
+        aggregated.add_module(Module(name=group_key, path=path))
 
     for dep in graph.dependencies:
         src = group_map.get(dep.source)
@@ -423,14 +413,7 @@ def _subgraph(
     for name in sorted(allowed):
         module = module_map.get(name)
         if module:
-            filtered.add_module(
-                Module(
-                    name=module.name,
-                    path=module.path,
-                    imports=list(module.imports),
-                    loc=module.loc,
-                )
-            )
+            filtered.add_module(Module(name=module.name, path=module.path))
 
     for dep in graph.dependencies:
         if dep.source in allowed and dep.target in allowed:

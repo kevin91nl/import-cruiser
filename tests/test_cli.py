@@ -470,42 +470,6 @@ class TestExportCommand:
         assert result.exit_code == 0, result.output
         assert "api.github.com" in result.output
 
-    def test_export_show_loc_flag(self, tmp_path: Path) -> None:
-        pkg = tmp_path / "src" / "mypkg"
-        pkg.mkdir(parents=True)
-        (pkg / "a.py").write_text("x = 1\n")
-        (pkg / "b.py").write_text("from mypkg.a import x\n")
-
-        runner = CliRunner()
-        without_loc = runner.invoke(
-            main,
-            [
-                "export",
-                str(tmp_path),
-                "--format",
-                "dot",
-                "--style",
-                "depcruise",
-            ],
-        )
-        assert without_loc.exit_code == 0, without_loc.output
-        assert "LOC" not in without_loc.output
-
-        with_loc = runner.invoke(
-            main,
-            [
-                "export",
-                str(tmp_path),
-                "--format",
-                "dot",
-                "--style",
-                "depcruise",
-                "--show-loc",
-            ],
-        )
-        assert with_loc.exit_code == 0, with_loc.output
-        assert "LOC" in with_loc.output
-
     def test_export_include_path_keeps_connected_external_nodes(
         self, tmp_path: Path
     ) -> None:

@@ -2,6 +2,7 @@
 # pylint: disable=duplicate-code
 
 from import_cruiser.graph import (
+    detect_cycles,
     Dependency,
     DependencyGraph,
     Module,
@@ -134,3 +135,29 @@ class TestPruneOrphanInitModules:
 
         assert {m.name for m in pruned.modules} == {"pkg", "pkg.mod"}
         assert set(pruned.edges()) == {("pkg", "pkg.mod")}
+
+
+class TestDetectCycles:
+    def test_circular_dependency_detection(self) -> None:
+        g = make_graph([("a", "b"), ("b", "c"), ("c", "a")])
+        cycles = detect_cycles(g)
+        assert len(cycles) == 1
+        assert set(cycles[0]) == {"a", "b", "c"}
+
+    def test_no_cycle(self) -> None:
+        g = make_graph([("a", "b"), ("b", "c")])
+        assert detect_cycles(g) == []
+
+    def test_self_loop(self) -> None:
+        g = make_graph([("a", "a")])
+        cycles = detect_cycles(g)
+        assert len(cycles) == 1
+        assert cycles[0] == ["a"]
+
+    def test_two_independent_cycles(self) -> None:
+        g = make_graph([("a", "b"), ("b", "a"), ("c", "d"), ("d", "c")])
+        cycles = detect_cycles(g)
+        assert len(cycles) == 2
+        cycle_sets = [set(c) for c in cycles]
+        assert {"a", "b"} in cycle_sets
+        assert {"c", "d"} in cycle_sets

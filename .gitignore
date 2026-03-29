@@ -40,3 +40,6 @@ htmlcov/
 *.swp
 *.swo
 .DS_Store
+appmap.log
+artifacts/*.html
+!artifacts/self-graph

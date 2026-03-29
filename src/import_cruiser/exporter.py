@@ -69,7 +69,6 @@ def export_json(
                 {
                     "name": m.name,
                     "path": m.path,
-                    "loc": m.loc,
                     "imports": graph.dependencies_of(m.name),
                 }
                 for m in sorted(graph.modules, key=lambda m: m.name)
@@ -94,7 +93,6 @@ def export_dot(
     cluster_mode: str = "path",
     style: str = "depcruise",
     edge_mode: str = "node",
-    show_loc: bool = False,
 ) -> str:
     """Return a DOT-format string representing the dependency graph."""
     if violations is None:
@@ -125,19 +123,12 @@ def export_dot(
     node_to_cluster: dict[str, str] = {}
     cluster_index: dict[str, list[str]] = {}
     if depcruise:
-        cluster_loc_map = _depcruise_cluster_loc_map(
-            modules=graph.modules,
-            path_root=path_root,
-            external_anchor_parts=external_anchor_parts,
-        )
         _append_depcruise_nodes(
             lines=lines,
             modules=graph.modules,
             node_id_map=node_id_map,
             path_root=path_root,
             external_anchor_parts=external_anchor_parts,
-            cluster_loc_map=cluster_loc_map,
-            show_loc=show_loc,
         )
     else:
         node_to_cluster, cluster_index = _append_standard_nodes(
@@ -148,7 +139,6 @@ def export_dot(
             cluster_mode=cluster_mode,
             style=style,
             path_root=path_root,
-            show_loc=show_loc,
         )
 
     if not depcruise and edge_mode == "cluster" and cluster_depth > 0:
@@ -205,8 +195,6 @@ def _append_depcruise_nodes(
     node_id_map: dict[str, str],
     path_root: str | None,
     external_anchor_parts: dict[str, list[str]],
-    cluster_loc_map: dict[str, int],
-    show_loc: bool,
 ) -> None:
     for module in sorted(modules, key=lambda m: m.name):
         node_id = _depcruise_node_id(
@@ -221,8 +209,6 @@ def _append_depcruise_nodes(
                 node_id,
                 path_root,
                 external_anchor_parts=external_anchor_parts,
-                cluster_loc_map=cluster_loc_map,
-                show_loc=show_loc,
             )
         )
     if modules:
@@ -237,7 +223,6 @@ def _append_standard_nodes(
     cluster_mode: str,
     style: str,
     path_root: str | None,
-    show_loc: bool,
 ) -> tuple[dict[str, str], dict[str, list[str]]]:
     cluster_index: dict[str, list[str]] = {}
     node_to_cluster: dict[str, str] = {}
@@ -257,7 +242,6 @@ def _append_standard_nodes(
                 mode=cluster_mode,
                 allowed=non_empty_clusters,
                 style=style,
-                show_loc=show_loc,
             )
         )
         for module in modules:
@@ -281,7 +265,7 @@ def _append_standard_nodes(
                 module.path,
                 module.name in cycle_nodes,
                 indent="    ",
-                label=_leaf_label(module, cluster_mode, show_loc),
+                label=_leaf_label(module, cluster_mode),
             )
         )
 
@@ -360,7 +344,6 @@ def export_svg(
     cluster_mode: str = "path",
     style: str = "depcruise",
     edge_mode: str = "node",
-    show_loc: bool = False,
 ) -> str:
     dot = export_dot(
         graph,
@@ -371,7 +354,6 @@ def export_svg(
         cluster_mode=cluster_mode,
         style=style,
         edge_mode=edge_mode,
-        show_loc=show_loc,
     )
     svg = _render_with_edge_fallback(
         dot=dot,
@@ -385,7 +367,6 @@ def export_svg(
         cluster_mode=cluster_mode,
         style=style,
         edge_mode=edge_mode,
-        show_loc=show_loc,
     )
     return _add_svg_padding(svg)
 
@@ -400,9 +381,8 @@ def export_html(
     cluster_mode: str = "path",
     style: str = "depcruise",
     edge_mode: str = "node",
-    show_loc: bool = False,
+    generation_command: str | None = None,
 ) -> str:
-    total_loc = sum(module.loc for module in graph.modules)
     dot = export_dot(
         graph,
         graph_name=graph_name,
@@ -412,7 +392,6 @@ def export_html(
         cluster_mode=cluster_mode,
         style=style,
         edge_mode=edge_mode,
-        show_loc=show_loc,
     )
     try:
         svg = _add_svg_padding(
@@ -428,15 +407,9 @@ def export_html(
                 cluster_mode=cluster_mode,
                 style=style,
                 edge_mode=edge_mode,
-                show_loc=show_loc,
             )
         )
-        body = _html_with_svg(
-            svg,
-            graph_name,
-            show_loc=show_loc,
-            total_loc=total_loc,
-        )
+        body = _html_with_svg(svg, graph_name, generation_command)
     except RuntimeError as exc:
         body = _html_with_fallback(dot, graph_name, str(exc))
     return body
@@ -455,7 +428,6 @@ def _render_with_edge_fallback(
     cluster_mode: str,
     style: str,
     edge_mode: str,
-    show_loc: bool,
 ) -> str:
     try:
         return _render_dot(dot, fmt, engine=engine)
@@ -471,7 +443,6 @@ def _render_with_edge_fallback(
             cluster_mode=cluster_mode,
             style=style,
             edge_mode="node",
-            show_loc=show_loc,
         )
         try:
             return _render_dot(cluster_safe_dot, fmt, engine=engine)
@@ -503,79 +474,35 @@ def _depcruise_node_id(
         return module.path.replace("\\", "/")
 
 
-def _depcruise_cluster_parts(
-    module: Module,
-    root: str | None,
-    external_anchor_parts: dict[str, list[str]] | None = None,
-) -> list[str]:
-    if module.path:
-        try:
-            path = Path(module.path).resolve()
-            if root:
-                path = path.relative_to(root)
-            return list(path.parts[:-1])
-        except ValueError:
-            return list(Path(module.path).parts[:-1])
-    if external_anchor_parts:
-        return external_anchor_parts.get(module.name, [])
-    return []
-
-
-def _depcruise_cluster_loc_map(
-    modules: list[Module],
-    path_root: str | None,
-    external_anchor_parts: dict[str, list[str]],
-) -> dict[str, int]:
-    cluster_locs: dict[str, int] = {}
-    for module in modules:
-        parts = _depcruise_cluster_parts(
-            module=module,
-            root=path_root,
-            external_anchor_parts=external_anchor_parts,
-        )
-        if not parts:
-            continue
-        prefix = ""
-        for part in parts:
-            prefix = part if not prefix else f"{prefix}/{part}"
-            cluster_locs[prefix] = cluster_locs.get(prefix, 0) + module.loc
-    return cluster_locs
-
-
-def _with_loc(label: str, loc: int) -> str:
-    return f"{label} ({loc} LOC)"
-
-
 def _depcruise_cluster_line(
     module: Module,
     node_id: str,
     root: str | None,
     external_anchor_parts: dict[str, list[str]] | None = None,
-    cluster_loc_map: dict[str, int] | None = None,
-    show_loc: bool = False,
 ) -> str:
     rel_path = node_id if module.path else module.name
-    base_label = Path(module.path).name if module.path else module.name
-    label = _with_loc(base_label, module.loc) if show_loc else base_label
+    label = Path(module.path).name if module.path else module.name
     attrs = _depcruise_node_attrs(module, label, rel_path)
-    parts = _depcruise_cluster_parts(
-        module=module,
-        root=root,
-        external_anchor_parts=external_anchor_parts,
-    )
+    parts: list[str] = []
+    if module.path:
+        try:
+            path = Path(module.path).resolve()
+            if root:
+                path = path.relative_to(root)
+            parts = list(path.parts[:-1])
+        except ValueError:
+            parts = list(Path(module.path).parts[:-1])
+    elif external_anchor_parts:
+        parts = external_anchor_parts.get(module.name, [])
 
     if not parts:
         return f"    {_dot_id(node_id)} [{attrs} ]"
 
+    line = f'    subgraph "cluster_{parts[0]}" {{label="{parts[0]}" '
     prefix = parts[0]
-    loc = (cluster_loc_map or {}).get(prefix, 0)
-    top_label = _with_loc(parts[0], loc) if show_loc else parts[0]
-    line = f'    subgraph "cluster_{prefix}" {{label="{top_label}" '
     for part in parts[1:]:
         prefix = f"{prefix}/{part}"
-        loc = (cluster_loc_map or {}).get(prefix, 0)
-        part_label = _with_loc(part, loc) if show_loc else part
-        line += f'subgraph "cluster_{prefix}" {{label="{part_label}" '
+        line += f'subgraph "cluster_{prefix}" {{label="{part}" '
 
     line += f"{_dot_id(node_id)} [{attrs} ] "
     line += "}" * len(parts)
@@ -673,37 +600,18 @@ def _render_cluster_tree(
     mode: str,
     allowed: set[str],
     style: str,
-    show_loc: bool,
 ) -> list[str]:
     lines: list[str] = []
 
     def children_of(parent_id: str) -> list[Cluster]:
         return [c for c in flat_clusters.values() if c["parent"] == parent_id]
 
-    loc_cache: dict[str, int] = {}
-
-    def cluster_loc(cluster_id: str) -> int:
-        cached = loc_cache.get(cluster_id)
-        if cached is not None:
-            return cached
-        cluster = flat_clusters[cluster_id]
-        total = sum(module.loc for module in cluster["modules"])
-        for child in children_of(cluster_id):
-            total += cluster_loc(child["id"])
-        loc_cache[cluster_id] = total
-        return total
-
     def render_cluster(cluster: Cluster, level_indent: str) -> None:
         if cluster["id"] not in allowed:
             return
         cid = _cluster_id(cluster["id"])
         lines.append(f'{level_indent}subgraph "cluster_{cid}" {{')
-        loc_label = (
-            _with_loc(cluster["label"], cluster_loc(cluster["id"]))
-            if show_loc
-            else cluster["label"]
-        )
-        lines.append(f'{level_indent}    label="{loc_label}";')
+        lines.append(f'{level_indent}    label="{cluster["label"]}";')
         if style != "depcruise":
             lines.append(f"{level_indent}    margin=6;")
             lines.append(f'{level_indent}    color="black";')
@@ -732,7 +640,7 @@ def _render_cluster_tree(
                     module.path,
                     module.name in cycle_nodes,
                     indent=level_indent + "    ",
-                    label=_leaf_label(module, mode, show_loc),
+                    label=_leaf_label(module, mode),
                 )
             )
 
@@ -779,12 +687,10 @@ def _clusters_related(a: str, b: str) -> bool:
     return a.startswith(b + ".") or b.startswith(a + ".")
 
 
-def _leaf_label(module: Module, mode: str, show_loc: bool = False) -> str:
+def _leaf_label(module, mode: str) -> str:
     if mode == "path":
-        base = Path(module.path).name
-    else:
-        base = module.name.split(".")[-1]
-    return _with_loc(base, module.loc) if show_loc else base
+        return Path(module.path).name
+    return module.name.split(".")[-1]
 
 
 def _node_cluster_key(
@@ -1048,12 +954,9 @@ def _add_svg_padding(svg: str, padding: int = 8) -> str:
 def _html_with_svg(
     svg: str,
     title: str,
-    *,
-    show_loc: bool,
-    total_loc: int,
+    generation_command: str | None = None,
 ) -> str:
     display_title = _display_graph_title(title)
-    show_loc_js = "true" if show_loc else "false"
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -1201,6 +1104,38 @@ def _html_with_svg(
             display: flex;
             align-items: center;
             gap: 12px;
+            overflow: hidden;
+        }}
+        .footer .spacer {{
+            flex: 1;
+        }}
+        .footer .muted {{
+            color: #6b7280;
+            white-space: nowrap;
+        }}
+        .footer code {{
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 10px;
+            background: #f9fafb;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            padding: 2px 6px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 52vw;
+        }}
+        .footer button {{
+            height: 22px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            background: #ffffff;
+            font-size: 11px;
+            cursor: pointer;
+            white-space: nowrap;
+        }}
+        .footer button:hover {{
+            background: #f9fafb;
         }}
         svg.focus-mode g.node,
         svg.focus-mode g.edge {{
@@ -1327,7 +1262,6 @@ def _html_with_svg(
         <span class="badge" id="search-count">0 matches</span>
         <span class="spacer"></span>
         <span class="badge" id="repo-badge">Repos: detecting…</span>
-        <span class="badge" id="loc-badge" style="display:none">LOC: 0</span>
     </div>
     <div class="canvas" id="canvas">
         <div class="viewport" id="viewport">{svg}</div>
@@ -1336,17 +1270,26 @@ def _html_with_svg(
             <div class="muted">Click a node or edge to pin details.</div>
         </aside>
     </div>
-    <div class="footer" id="footer">Ready</div>
+    <div class="footer" id="footer">
+        <span id="footer-status">Ready</span>
+        <span class="spacer"></span>
+        <span class="muted" id="render-command-label">Generated with:</span>
+        <code id="render-command"></code>
+        <button id="btn-copy-command" title="Copy generation command">Copy</button>
+    </div>
     <script>
         const canvas = document.getElementById('canvas');
         const viewport = document.getElementById('viewport');
         const svg = viewport.querySelector('svg');
         const inspector = document.getElementById('inspector');
-        const footer = document.getElementById('footer');
+        const footerStatus = document.getElementById('footer-status');
+        const commandLabel = document.getElementById('render-command-label');
+        const commandText = document.getElementById('render-command');
+        const copyCommandButton = document.getElementById('btn-copy-command');
         const searchInput = document.getElementById('search');
         const searchCount = document.getElementById('search-count');
         const repoBadge = document.getElementById('repo-badge');
-        const locBadge = document.getElementById('loc-badge');
+        const generationCommand = {json.dumps(generation_command or "")};
         const initialViewBox = svg?.getAttribute('viewBox') || '';
         let scale = 1;
         let originX = 0;
@@ -1394,8 +1337,6 @@ def _html_with_svg(
         const DOUBLE_CLICK_MS = 320;
         let reviewMode = false;
         let reviewSummary = null;
-        const showLocEnabled = {show_loc_js};
-        const totalLoc = {total_loc};
 
         clusterGroups.forEach((cluster) => {{
             const raw = titleOf(cluster);
@@ -1452,10 +1393,6 @@ def _html_with_svg(
             repoBadge.textContent = `Packages: ${{packageRoots.size}}`;
         }} else {{
             repoBadge.textContent = 'Repos: unknown';
-        }}
-        if (showLocEnabled) {{
-            locBadge.style.display = 'inline-block';
-            locBadge.textContent = `LOC: ${{totalLoc}}`;
         }}
 
         edgeGroups.forEach((edge) => {{
@@ -1601,11 +1538,39 @@ def _html_with_svg(
         const applyTransform = () => {{
             viewport.style.transform =
                 `translate(${{originX}}px, ${{originY}}px) scale(${{scale}})`;
-            footer.textContent =
+            footerStatus.textContent =
                 `Nodes: ${{nodeGroups.length}} · ` +
                 `Edges: ${{edgeGroups.length}} · ` +
                 `Zoom: ${{Math.round(scale * 100)}}%`;
         }};
+
+        const copyGenerationCommand = async () => {{
+            if (!generationCommand) return;
+            try {{
+                await navigator.clipboard.writeText(generationCommand);
+            }} catch (_error) {{
+                const tmp = document.createElement('textarea');
+                tmp.value = generationCommand;
+                document.body.appendChild(tmp);
+                tmp.select();
+                document.execCommand('copy');
+                tmp.remove();
+            }}
+            const oldLabel = copyCommandButton.textContent;
+            copyCommandButton.textContent = 'Copied';
+            window.setTimeout(() => {{
+                copyCommandButton.textContent = oldLabel;
+            }}, 1000);
+        }};
+
+        if (generationCommand) {{
+            commandText.textContent = generationCommand;
+            copyCommandButton.addEventListener('click', copyGenerationCommand);
+        }} else {{
+            commandLabel.style.display = 'none';
+            commandText.style.display = 'none';
+            copyCommandButton.style.display = 'none';
+        }}
 
         const fitToView = () => {{
             if (!svg || !svg.viewBox || !svg.viewBox.baseVal) return;

@@ -1,0 +1,28 @@
+# Volledige mappen die de AI nooit hoeft te indexeren
+node_modules/
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Build & Artefacten (Deze zag ik specifiek in je prompt staan)
+build/
+dist/
+*.egg-info/
+htmlcov/
+coverage.xml
+coverage.json
+.coverage
+integrity_report.json
+
+# IDE & OS ruis
+.vscode/
+.DS_Store
+*.log
+*.tmp
+
+# Specifiek voor import-cruiser (grote gegenereerde bestanden)
+artifacts/*.html
+artifacts/*.dot

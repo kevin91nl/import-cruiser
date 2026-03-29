@@ -494,17 +494,16 @@ def test_exporter_error_and_style_paths(monkeypatch: pytest.MonkeyPatch) -> None
         lambda *a, **k: "<svg/>",
     )
     assert export_svg(graph) == "<svg/>"
-    html_default = export_html(graph)
-    assert "<svg/>" in html_default
-    assert "const showLocEnabled = false;" in html_default
-
-    loc_graph = DependencyGraph()
-    loc_graph.add_module(Module(name="pkg.a", path="/tmp/pkg/a.py", loc=3))
-    loc_graph.add_module(Module(name="pkg.b", path="/tmp/pkg/b.py", loc=5))
-    loc_graph.add_dependency(Dependency(source="pkg.a", target="pkg.b", line=1))
-    html_with_loc = export_html(loc_graph, show_loc=True)
-    assert "const showLocEnabled = true;" in html_with_loc
-    assert "const totalLoc = 8;" in html_with_loc
+    assert "<svg/>" in export_html(graph)
+    html_with_command = export_html(
+        graph,
+        generation_command="import-cruiser export . --format html --output deps.html",
+    )
+    assert "Copy" in html_with_command
+    assert "Generated with:" in html_with_command
+    assert (
+        "import-cruiser export . --format html --output deps.html" in html_with_command
+    )
 
     render_calls: list[str] = []
 
@@ -625,30 +624,8 @@ def test_exporter_error_and_style_paths(monkeypatch: pytest.MonkeyPatch) -> None
         "default",
         allowed={"a.c"},
         style="default",
-        show_loc=False,
     )
     assert skipped_lines == [""]
-
-    nested_flat = {
-        "pkg": {"id": "pkg", "label": "pkg", "parent": None, "modules": []},
-        "pkg.sub": {
-            "id": "pkg.sub",
-            "label": "sub",
-            "parent": "pkg",
-            "modules": [Module(name="pkg.sub.mod", path="/x.py", loc=4)],
-        },
-    }
-    loc_lines = _render_cluster_tree(
-        {"pkg": nested_flat["pkg"]},
-        nested_flat,
-        set(),
-        "    ",
-        "default",
-        allowed={"pkg", "pkg.sub"},
-        style="default",
-        show_loc=True,
-    )
-    assert any("pkg (4 LOC)" in line for line in loc_lines)
 
     monkeypatch.setattr(
         "import_cruiser.exporter.os.path.commonpath",

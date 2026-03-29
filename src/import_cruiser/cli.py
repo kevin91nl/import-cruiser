@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import sys
+import shlex
 import re
 from pathlib import Path
 from typing import Optional, cast
@@ -213,12 +214,6 @@ def main() -> None:
     show_default=True,
     help="Include HTTP request hosts as external nodes.",
 )
-@click.option(
-    "--show-loc/--hide-loc",
-    default=False,
-    show_default=True,
-    help="Show LOC labels on modules and clusters in graph exports.",
-)
 def cmd_analyze(
     path: str,
     output: Optional[str],
@@ -243,7 +238,6 @@ def cmd_analyze(
     prune_isolated: bool,
     include_db_connectors: bool,
     include_http_hosts: bool,
-    show_loc: bool,
 ) -> None:
     """Analyze Python import dependencies in PATH and output results.
 
@@ -291,7 +285,6 @@ def cmd_analyze(
             cluster_mode=cluster_mode,
             style=style,
             edge_mode=edge_mode,
-            show_loc=show_loc,
         )
     elif fmt == "svg":
         result = _export_svg(
@@ -302,7 +295,6 @@ def cmd_analyze(
             cluster_mode=cluster_mode,
             style=style,
             edge_mode=edge_mode,
-            show_loc=show_loc,
         )
     elif fmt == "html":
         result = export_html(
@@ -313,7 +305,7 @@ def cmd_analyze(
             cluster_mode=cluster_mode,
             style=style,
             edge_mode=edge_mode,
-            show_loc=show_loc,
+            generation_command=_invocation_command(),
         )
     else:
         cycles = detect_cycles(graph)
@@ -551,12 +543,6 @@ def cmd_validate(
     help="Include HTTP request hosts as external nodes.",
 )
 @click.option(
-    "--show-loc/--hide-loc",
-    default=False,
-    show_default=True,
-    help="Show LOC labels on modules and clusters in graph exports.",
-)
-@click.option(
     "--output",
     "-o",
     type=click.Path(dir_okay=False, writable=True),
@@ -587,7 +573,6 @@ def cmd_export(
     prune_isolated: bool,
     include_db_connectors: bool,
     include_http_hosts: bool,
-    show_loc: bool,
     output: Optional[str],
 ) -> None:
     """Export the dependency graph of PATH to the specified format.
@@ -638,7 +623,6 @@ def cmd_export(
             cluster_mode=cluster_mode,
             style=style,
             edge_mode=edge_mode,
-            show_loc=show_loc,
         )
     elif fmt == "svg":
         result = _export_svg(
@@ -650,7 +634,6 @@ def cmd_export(
             cluster_mode=cluster_mode,
             style=style,
             edge_mode=edge_mode,
-            show_loc=show_loc,
         )
     else:
         result = export_html(
@@ -662,7 +645,7 @@ def cmd_export(
             cluster_mode=cluster_mode,
             style=style,
             edge_mode=edge_mode,
-            show_loc=show_loc,
+            generation_command=_invocation_command(),
         )
     _write_output(result, output)
 
@@ -681,6 +664,12 @@ def _write_output(content: str, output: Optional[str]) -> None:
         click.echo(f"Output written to {output_path}", err=True)
     else:
         click.echo(content)
+
+
+def _invocation_command() -> str:
+    argv = getattr(sys, "orig_argv", None)
+    parts = argv if isinstance(argv, list) and argv else sys.argv
+    return " ".join(shlex.quote(part) for part in parts)
 
 
 def _effective_exclude_paths(
@@ -827,7 +816,6 @@ def _export_svg(
     cluster_mode: str = "path",
     style: str = "depcruise",
     edge_mode: str = "node",
-    show_loc: bool = False,
 ) -> str:
     if violations is None:
         violations = []
@@ -841,7 +829,6 @@ def _export_svg(
             cluster_mode=cluster_mode,
             style=style,
             edge_mode=edge_mode,
-            show_loc=show_loc,
         )
     except RuntimeError as exc:
         click.echo(f"Graphviz error: {exc}", err=True)
