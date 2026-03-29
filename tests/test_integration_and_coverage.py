@@ -663,6 +663,26 @@ def test_add_svg_padding_helper() -> None:
     viewbox_only = _add_svg_padding('<svg viewBox="0 0 10 10"></svg>', padding=5)
     assert 'viewBox="-5.00 -5.00 20.00 20.00"' in viewbox_only
 
+    broken_ns = (
+        '<svg viewBox="0 0 10 10">'
+        '<g><a ns1:title="/tmp/a.py" ns1:href="/tmp/a.py"></a></g>'
+        "</svg>"
+    )
+    fixed_ns = _add_svg_padding(broken_ns, padding=0)
+    assert 'xmlns:xlink="http://www.w3.org/1999/xlink"' in fixed_ns
+    assert "ns1:title=" not in fixed_ns
+    assert "ns1:href=" not in fixed_ns
+    assert "xlink:title=" in fixed_ns
+    assert "xlink:href=" in fixed_ns
+
+    valid_xlink = (
+        '<svg xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 10 10">'
+        '<g><a xlink:title="/tmp/a.py" xlink:href="/tmp/a.py"></a></g>'
+        "</svg>"
+    )
+    preserved = _add_svg_padding(valid_xlink, padding=0)
+    assert preserved.count('xmlns:xlink="http://www.w3.org/1999/xlink"') == 1
+
 
 def test_exporter_common_root_when_src_is_common(tmp_path: Path) -> None:
     pkg = tmp_path / "src" / "pkg"

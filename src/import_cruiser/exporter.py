@@ -918,7 +918,35 @@ def _render_dot(dot: str, fmt: str, engine: str = "dot") -> str:
     return result.stdout
 
 
+def _normalize_svg_link_namespace(svg: str) -> str:
+    """Normalize SVG link attribute namespaces for broader XML parser compatibility."""
+    normalized = re.sub(
+        r'\b(?:xlink|ns\d+):(href|title)="',
+        r'xlink:\1="',
+        svg,
+    )
+
+    if "xlink:" not in normalized:
+        return normalized
+
+    svg_tag_match = re.search(r"<svg\b[^>]*>", normalized)
+    if not svg_tag_match:
+        return normalized
+
+    svg_tag = svg_tag_match.group(0)
+    if "xmlns:xlink=" in svg_tag:
+        return normalized
+
+    updated_svg_tag = svg_tag[:-1] + ' xmlns:xlink="http://www.w3.org/1999/xlink">'
+    return (
+        normalized[: svg_tag_match.start()]
+        + updated_svg_tag
+        + normalized[svg_tag_match.end() :]
+    )
+
+
 def _add_svg_padding(svg: str, padding: int = 8) -> str:
+    svg = _normalize_svg_link_namespace(svg)
     viewbox_match = re.search(
         r'viewBox="([\-0-9.eE]+)\s+([\-0-9.eE]+)\s+([\-0-9.eE]+)\s+([\-0-9.eE]+)"',
         svg,
