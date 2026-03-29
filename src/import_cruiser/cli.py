@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import shlex
 import re
@@ -669,7 +670,52 @@ def _write_output(content: str, output: Optional[str]) -> None:
 def _invocation_command() -> str:
     argv = getattr(sys, "orig_argv", None)
     parts = argv if isinstance(argv, list) and argv else sys.argv
-    return " ".join(shlex.quote(part) for part in parts)
+    cwd = Path.cwd().resolve()
+    normalized = [
+        _normalize_command_part(part, index, cwd) for index, part in enumerate(parts)
+    ]
+    command = " ".join(shlex.quote(part) for part in normalized)
+    pythonpath = _normalized_pythonpath(cwd)
+    if pythonpath:
+        return f"PYTHONPATH={shlex.quote(pythonpath)} {command}"
+    return command
+
+
+def _normalize_command_part(part: str, index: int, cwd: Path) -> str:
+    value = str(part)
+    candidate = Path(value)
+    if not candidate.is_absolute():
+        return value
+    if index == 0:
+        executable = candidate.name or value
+        if executable.lower() == "python":
+            return "python3"
+        return executable
+    try:
+        rel = candidate.resolve().relative_to(cwd)
+        return str(rel).replace("\\", "/") or "."
+    except ValueError:
+        return value
+
+
+def _normalized_pythonpath(cwd: Path) -> str:
+    raw_pythonpath = os.environ.get("PYTHONPATH", "").strip()
+    if not raw_pythonpath:
+        return ""
+    normalized_entries: list[str] = []
+    for entry in raw_pythonpath.split(os.pathsep):
+        value = entry.strip()
+        if not value:
+            continue
+        candidate = Path(value)
+        if candidate.is_absolute():
+            try:
+                relative = candidate.resolve().relative_to(cwd)
+                value = str(relative).replace("\\", "/") or "."
+            except ValueError:
+                value = str(candidate).replace("\\", "/")
+        normalized_entries.append(value)
+    return os.pathsep.join(normalized_entries)
 
 
 def _effective_exclude_paths(

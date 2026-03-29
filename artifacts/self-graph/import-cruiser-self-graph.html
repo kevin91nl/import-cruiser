@@ -476,7 +476,7 @@
         const searchInput = document.getElementById('search');
         const searchCount = document.getElementById('search-count');
         const repoBadge = document.getElementById('repo-badge');
-        const generationCommand = "/opt/homebrew/Cellar/python@3.13/3.13.5/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python -m import_cruiser.cli export . --format html --include-path src/import_cruiser/ --exclude-path '__init__\\.py$|/tests/' --output artifacts/self-graph/import-cruiser-self-graph.html";
+        const generationCommand = "PYTHONPATH=src python3 -m import_cruiser.cli export . --format html --include-path src/import_cruiser/ --exclude-path '__init__\\.py$|/tests/' --output artifacts/self-graph/import-cruiser-self-graph.html";
         const initialViewBox = svg?.getAttribute('viewBox') || '';
         let scale = 1;
         let originX = 0;
