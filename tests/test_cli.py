@@ -85,6 +85,35 @@ class TestAnalyzeCommand:
         assert "sqlalchemy" in module_names
         assert "psycopg" in module_names
 
+    def test_analyze_include_external_deps(self, tmp_path: Path) -> None:
+        (tmp_path / "pyproject.toml").write_text(
+            """
+[tool.poetry]
+name = "mypkg"
+version = "0.1.0"
+description = ""
+authors = ["dev"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+requests = "^2.0"
+"""
+        )
+        (tmp_path / "app.py").write_text("import requests\n")
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "analyze",
+                str(tmp_path),
+                "--include-external-deps",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        module_names = {module["name"] for module in data["modules"]}
+        assert "requests" in module_names
+
     def test_analyze_exclude_common_noise_paths(self, tmp_path: Path) -> None:
         src_pkg = tmp_path / "src" / "mypkg"
         tests_pkg = tmp_path / "tests"

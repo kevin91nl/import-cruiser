@@ -27,6 +27,16 @@ DB_EXTERNAL_MODULES: set[str] = {
     "postgres",
 }
 
+EXTERNAL_DEPENDENCY_CLUSTER_ID = "__external_deps__"
+EXTERNAL_DEPENDENCY_CLUSTER_LABEL = "External dependencies"
+EXTERNAL_DEPENDENCY_CLUSTER_ATTRS = (
+    'style="rounded,filled" fillcolor="#ECFCCB" color="#4D7C0F" fontcolor="#14532D" '
+)
+EXTERNAL_DEPENDENCY_NODE_ATTRS = (
+    'shape="box" style="rounded,filled" fillcolor="#DCFCE7" color="#15803D" '
+    'penwidth=1.4 fontcolor="#14532D"'
+)
+
 
 class ViolationLike(Protocol):
     source: str
@@ -94,6 +104,7 @@ def export_dot(
     style: str = "depcruise",
     edge_mode: str = "node",
     show_loc: bool = False,
+    external_package_roots: set[str] | None = None,
 ) -> str:
     """Return a DOT-format string representing the dependency graph."""
     if violations is None:
@@ -131,6 +142,7 @@ def export_dot(
             path_root=path_root,
             external_anchor_parts=external_anchor_parts,
             show_loc=show_loc,
+            external_package_roots=external_package_roots,
         )
     else:
         node_to_cluster, cluster_index = _append_standard_nodes(
@@ -199,6 +211,7 @@ def _append_depcruise_nodes(
     path_root: str | None,
     external_anchor_parts: dict[str, list[str]],
     show_loc: bool,
+    external_package_roots: set[str] | None,
 ) -> None:
     cluster_loc_totals = (
         _depcruise_cluster_loc_totals(modules, path_root) if show_loc else {}
@@ -218,6 +231,7 @@ def _append_depcruise_nodes(
                 external_anchor_parts=external_anchor_parts,
                 show_loc=show_loc,
                 cluster_loc_totals=cluster_loc_totals,
+                external_package_roots=external_package_roots,
             )
         )
     if modules:
@@ -367,6 +381,7 @@ def export_svg(
     style: str = "depcruise",
     edge_mode: str = "node",
     show_loc: bool = False,
+    external_package_roots: set[str] | None = None,
 ) -> str:
     dot = export_dot(
         graph,
@@ -378,6 +393,7 @@ def export_svg(
         style=style,
         edge_mode=edge_mode,
         show_loc=show_loc,
+        external_package_roots=external_package_roots,
     )
     svg = _render_with_edge_fallback(
         dot=dot,
@@ -392,6 +408,7 @@ def export_svg(
         style=style,
         edge_mode=edge_mode,
         show_loc=show_loc,
+        external_package_roots=external_package_roots,
     )
     return _add_svg_padding(svg)
 
@@ -408,6 +425,7 @@ def export_html(
     edge_mode: str = "node",
     show_loc: bool = False,
     generation_command: str | None = None,
+    external_package_roots: set[str] | None = None,
 ) -> str:
     dot = export_dot(
         graph,
@@ -419,6 +437,7 @@ def export_html(
         style=style,
         edge_mode=edge_mode,
         show_loc=show_loc,
+        external_package_roots=external_package_roots,
     )
     try:
         svg = _add_svg_padding(
@@ -435,6 +454,7 @@ def export_html(
                 style=style,
                 edge_mode=edge_mode,
                 show_loc=show_loc,
+                external_package_roots=external_package_roots,
             )
         )
         body = _html_with_svg(svg, graph_name, generation_command)
@@ -457,6 +477,7 @@ def _render_with_edge_fallback(
     style: str,
     edge_mode: str,
     show_loc: bool,
+    external_package_roots: set[str] | None = None,
 ) -> str:
     try:
         return _render_dot(dot, fmt, engine=engine)
@@ -473,6 +494,7 @@ def _render_with_edge_fallback(
             style=style,
             edge_mode="node",
             show_loc=show_loc,
+            external_package_roots=external_package_roots,
         )
         try:
             return _render_dot(cluster_safe_dot, fmt, engine=engine)
@@ -511,31 +533,38 @@ def _depcruise_cluster_line(
     external_anchor_parts: dict[str, list[str]] | None = None,
     show_loc: bool = False,
     cluster_loc_totals: dict[str, int] | None = None,
+    external_package_roots: set[str] | None = None,
 ) -> str:
     rel_path = node_id if module.path else module.name
     label = Path(module.path).name if module.path else module.name
     if show_loc:
         label = _label_with_loc(label, module.loc)
-    attrs = _depcruise_node_attrs(module, label, rel_path)
-    parts: list[str] = []
-    if module.path:
-        try:
-            path = Path(module.path).resolve()
-            if root:
-                path = path.relative_to(root)
-            parts = list(path.parts[:-1])
-        except ValueError:
-            parts = list(Path(module.path).parts[:-1])
-    elif external_anchor_parts:
-        parts = external_anchor_parts.get(module.name, [])
-
+    attrs = _depcruise_node_attrs(
+        module,
+        label,
+        rel_path,
+        external_package_roots=external_package_roots,
+    )
+    parts, is_external_dependency_group = _depcruise_cluster_parts(
+        module,
+        root,
+        external_anchor_parts,
+        external_package_roots,
+    )
     if not parts:
         return f"    {_dot_id(node_id)} [{attrs} ]"
 
     root_label = parts[0]
-    if show_loc and cluster_loc_totals is not None:
-        root_label = _label_with_loc(root_label, cluster_loc_totals.get(parts[0], 0))
-    line = f'    subgraph "cluster_{parts[0]}" {{label="{root_label}" '
+    root_label = _depcruise_cluster_root_label(
+        parts[0],
+        show_loc,
+        cluster_loc_totals,
+        is_external_dependency_group,
+    )
+    extra_attrs = (
+        EXTERNAL_DEPENDENCY_CLUSTER_ATTRS if is_external_dependency_group else ""
+    )
+    line = f'    subgraph "cluster_{parts[0]}" ' f'{{label="{root_label}" {extra_attrs}'
     prefix = parts[0]
     for part in parts[1:]:
         prefix = f"{prefix}/{part}"
@@ -549,7 +578,46 @@ def _depcruise_cluster_line(
     return line
 
 
-def _depcruise_node_attrs(module: Module, label: str, rel_path: str) -> str:
+def _depcruise_cluster_parts(
+    module: Module,
+    root: str | None,
+    external_anchor_parts: dict[str, list[str]] | None,
+    external_package_roots: set[str] | None,
+) -> tuple[list[str], bool]:
+    if module.path:
+        try:
+            path = Path(module.path).resolve()
+            if root:
+                path = path.relative_to(root)
+            return list(path.parts[:-1]), False
+        except ValueError:
+            return list(Path(module.path).parts[:-1]), False
+    if _is_external_package_node(module.name, module.path, external_package_roots):
+        return [EXTERNAL_DEPENDENCY_CLUSTER_ID], True
+    if external_anchor_parts:
+        return external_anchor_parts.get(module.name, []), False
+    return [], False
+
+
+def _depcruise_cluster_root_label(
+    cluster_id: str,
+    show_loc: bool,
+    cluster_loc_totals: dict[str, int] | None,
+    is_external_dependency_group: bool,
+) -> str:
+    if is_external_dependency_group:
+        return EXTERNAL_DEPENDENCY_CLUSTER_LABEL
+    if show_loc and cluster_loc_totals is not None:
+        return _label_with_loc(cluster_id, cluster_loc_totals.get(cluster_id, 0))
+    return cluster_id
+
+
+def _depcruise_node_attrs(
+    module: Module,
+    label: str,
+    rel_path: str,
+    external_package_roots: set[str] | None = None,
+) -> str:
     base = f'label=<{label}> tooltip="{label}" URL="{rel_path}"'
     if _is_database_external_node(module.name, module.path):
         return (
@@ -563,6 +631,8 @@ def _depcruise_node_attrs(module: Module, label: str, rel_path: str) -> str:
             'fillcolor="#DBEAFE" color="#1D4ED8" penwidth="1.4" '
             'fontcolor="#1E3A8A"'
         )
+    if _is_external_package_node(module.name, module.path, external_package_roots):
+        return f"{base} {EXTERNAL_DEPENDENCY_NODE_ATTRS}"
     return base
 
 
@@ -951,6 +1021,19 @@ def _is_http_external_node(name: str, path: str) -> bool:
         return False
     root = name.split(".", 1)[0]
     return root not in DB_EXTERNAL_MODULES
+
+
+def _is_external_package_node(
+    name: str,
+    path: str,
+    external_package_roots: set[str] | None,
+) -> bool:
+    if path:
+        return False
+    if not external_package_roots:
+        return False
+    root = name.split(".", 1)[0]
+    return root in external_package_roots
 
 
 def _external_anchor_parts(

@@ -4,11 +4,16 @@
 from __future__ import annotations
 
 import os
-import sys
 import shlex
 import re
+import sys
 from pathlib import Path
 from typing import Optional, cast
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python <3.11 fallback
+    import tomli as tomllib
 
 import click
 
@@ -216,6 +221,12 @@ def main() -> None:
     help="Include HTTP request hosts as external nodes.",
 )
 @click.option(
+    "--include-external-deps/--no-include-external-deps",
+    default=False,
+    show_default=True,
+    help="Include non-dev external dependencies as grouped nodes.",
+)
+@click.option(
     "--show-loc/--no-show-loc",
     default=False,
     show_default=True,
@@ -245,6 +256,7 @@ def cmd_analyze(
     prune_isolated: bool,
     include_db_connectors: bool,
     include_http_hosts: bool,
+    include_external_deps: bool,
     show_loc: bool,
 ) -> None:
     """Analyze Python import dependencies in PATH and output results.
@@ -255,12 +267,17 @@ def cmd_analyze(
         exclude_path,
         exclude_common_noise_paths,
     )
+    external_patterns, _ = _external_dependency_info(
+        include_db_connectors,
+        include_external_deps,
+        path,
+    )
     graph = Analyzer(
         path,
         normalize_hyphens=normalize_hyphens,
         include_paths=list(include_path),
         exclude_paths=effective_exclude_paths,
-        include_external_patterns=_external_patterns_for_db(include_db_connectors),
+        include_external_patterns=external_patterns,
         include_http_hosts=include_http_hosts,
     ).analyze()
     graph, layout, rankdir, cluster_depth, cluster_mode, style, edge_mode = (
@@ -554,6 +571,12 @@ def cmd_validate(
     help="Include HTTP request hosts as external nodes.",
 )
 @click.option(
+    "--include-external-deps/--no-include-external-deps",
+    default=False,
+    show_default=True,
+    help="Include non-dev external dependencies as grouped nodes.",
+)
+@click.option(
     "--show-loc/--no-show-loc",
     default=False,
     show_default=True,
@@ -590,6 +613,7 @@ def cmd_export(
     prune_isolated: bool,
     include_db_connectors: bool,
     include_http_hosts: bool,
+    include_external_deps: bool,
     show_loc: bool,
     output: Optional[str],
 ) -> None:
@@ -602,12 +626,17 @@ def cmd_export(
         exclude_path,
         exclude_common_noise_paths,
     )
+    external_patterns, external_package_roots = _external_dependency_info(
+        include_db_connectors,
+        include_external_deps,
+        path,
+    )
     graph = Analyzer(
         path,
         normalize_hyphens=normalize_hyphens,
         include_paths=list(include_path),
         exclude_paths=effective_exclude_paths,
-        include_external_patterns=_external_patterns_for_db(include_db_connectors),
+        include_external_patterns=external_patterns,
         include_http_hosts=include_http_hosts,
     ).analyze()
     graph, layout, rankdir, cluster_depth, cluster_mode, style, edge_mode = (
@@ -642,6 +671,7 @@ def cmd_export(
             style=style,
             edge_mode=edge_mode,
             show_loc=show_loc,
+            external_package_roots=external_package_roots,
         )
     elif fmt == "svg":
         result = _export_svg(
@@ -654,6 +684,7 @@ def cmd_export(
             style=style,
             edge_mode=edge_mode,
             show_loc=show_loc,
+            external_package_roots=external_package_roots,
         )
     else:
         result = export_html(
@@ -666,6 +697,7 @@ def cmd_export(
             style=style,
             edge_mode=edge_mode,
             show_loc=show_loc,
+            external_package_roots=external_package_roots,
             generation_command=_invocation_command(),
         )
     _write_output(result, output)
@@ -757,6 +789,66 @@ def _external_patterns_for_db(
     if not include_db_connectors:
         return []
     return list(DB_CONNECTOR_IMPORT_PATTERNS)
+
+
+def _external_dependency_info(
+    include_db_connectors: bool,
+    include_external_deps: bool,
+    project_path: str,
+) -> tuple[list[str], set[str]]:
+    patterns = _external_patterns_for_db(include_db_connectors)
+    roots: set[str] = set()
+    if not include_external_deps:
+        return patterns, roots
+    dependency_roots = _non_dev_dependency_roots(project_path)
+    if not dependency_roots:
+        return patterns, roots
+    roots.update(dependency_roots)
+    patterns.extend(
+        rf"(^|\.){re.escape(root)}(\.|$)" for root in sorted(dependency_roots)
+    )
+    return patterns, roots
+
+
+def _non_dev_dependency_roots(project_path: str) -> set[str]:
+    candidate = Path(project_path)
+    try:
+        candidate = candidate.resolve()
+    except OSError:
+        candidate = candidate.absolute()
+    pyproject_path = _find_pyproject(candidate)
+    if pyproject_path is None:
+        return set()
+    try:
+        with pyproject_path.open("rb") as fo:
+            data = tomllib.load(fo)
+    except (OSError, tomllib.TOMLDecodeError):
+        return set()
+    poetry = data.get("tool", {}).get("poetry")
+    if not isinstance(poetry, dict):
+        return set()
+    dependencies = poetry.get("dependencies")
+    if not isinstance(dependencies, dict):
+        return set()
+    roots: set[str] = set()
+    for name in dependencies.keys():
+        if not isinstance(name, str) or name == "python":
+            continue
+        normalized = name.replace("-", "_")
+        roots.add(normalized)
+    return roots
+
+
+def _find_pyproject(start: Path) -> Path | None:
+    current = start
+    while True:
+        candidate = current / "pyproject.toml"
+        if candidate.is_file():
+            return candidate
+        parent = current.parent
+        if parent == current:
+            return None
+        current = parent
 
 
 def _apply_graph_options(
@@ -883,6 +975,7 @@ def _export_svg(
     style: str = "depcruise",
     edge_mode: str = "node",
     show_loc: bool = False,
+    external_package_roots: set[str] | None = None,
 ) -> str:
     if violations is None:
         violations = []
@@ -897,6 +990,7 @@ def _export_svg(
             style=style,
             edge_mode=edge_mode,
             show_loc=show_loc,
+            external_package_roots=external_package_roots,
         )
     except RuntimeError as exc:
         click.echo(f"Graphviz error: {exc}", err=True)

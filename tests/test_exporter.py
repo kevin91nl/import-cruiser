@@ -210,6 +210,21 @@ class TestExportDot:
         assert f'label="src [{src_loc} LOC]"' in result
         assert f'label="pkg [{pkg_loc} LOC]"' in result
 
+    def test_depcruise_external_dependencies_grouped(self) -> None:
+        graph = DependencyGraph()
+        graph.add_module(Module(name="pkg.main", path="pkg/main.py"))
+        graph.add_module(Module(name="requests", path=""))
+        graph.add_dependency(Dependency(source="pkg.main", target="requests"))
+
+        result = export_dot(
+            graph,
+            style="depcruise",
+            external_package_roots={"requests"},
+        )
+        assert "cluster___external_deps__" in result
+        assert 'label="External dependencies"' in result
+        assert 'fillcolor="#DCFCE7"' in result
+
     def test_depcruise_falls_back_to_module_names(self) -> None:
         graph = DependencyGraph()
         graph.add_module(Module(name="a", path=""))
