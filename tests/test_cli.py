@@ -114,6 +114,76 @@ requests = "^2.0"
         module_names = {module["name"] for module in data["modules"]}
         assert "requests" in module_names
 
+    def test_analyze_include_external_deps_with_include_filter(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / "pyproject.toml").write_text(
+            """
+[tool.poetry]
+name = "mypkg"
+version = "0.1.0"
+description = ""
+authors = ["dev"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+requests = "^2.0"
+httpx = "^0.27"
+"""
+        )
+        (tmp_path / "app.py").write_text("import requests\nimport httpx\n")
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "analyze",
+                str(tmp_path),
+                "--include-external-deps",
+                "--external-deps-include",
+                "^requests$",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        module_names = {module["name"] for module in data["modules"]}
+        assert "requests" in module_names
+        assert "httpx" not in module_names
+
+    def test_analyze_include_external_deps_with_exclude_filter(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / "pyproject.toml").write_text(
+            """
+[tool.poetry]
+name = "mypkg"
+version = "0.1.0"
+description = ""
+authors = ["dev"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+requests = "^2.0"
+httpx = "^0.27"
+"""
+        )
+        (tmp_path / "app.py").write_text("import requests\nimport httpx\n")
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "analyze",
+                str(tmp_path),
+                "--include-external-deps",
+                "--external-deps-exclude",
+                "^httpx$",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        module_names = {module["name"] for module in data["modules"]}
+        assert "requests" in module_names
+        assert "httpx" not in module_names
+
     def test_analyze_exclude_common_noise_paths(self, tmp_path: Path) -> None:
         src_pkg = tmp_path / "src" / "mypkg"
         tests_pkg = tmp_path / "tests"
@@ -513,6 +583,42 @@ class TestExportCommand:
         )
         assert result.exit_code == 0, result.output
         assert "api.github.com" in result.output
+
+    def test_export_external_deps_include_exclude_filters(self, tmp_path: Path) -> None:
+        (tmp_path / "pyproject.toml").write_text(
+            """
+[tool.poetry]
+name = "mypkg"
+version = "0.1.0"
+description = ""
+authors = ["dev"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+requests = "^2.0"
+httpx = "^0.27"
+"""
+        )
+        (tmp_path / "app.py").write_text("import requests\nimport httpx\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "export",
+                str(tmp_path),
+                "--format",
+                "dot",
+                "--include-external-deps",
+                "--external-deps-include",
+                "^requests$",
+                "--external-deps-exclude",
+                "^httpx$",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "requests" in result.output
+        assert "httpx" not in result.output
 
     def test_export_include_path_keeps_connected_external_nodes(
         self, tmp_path: Path

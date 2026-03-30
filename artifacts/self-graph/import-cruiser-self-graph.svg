@@ -17,28 +17,28 @@
 <g id="clust2" class="cluster">
 <title>cluster_src</title>
 <path fill="#ffffff" stroke="black" stroke-width="2" d="M20,-98C20,-98 344.25,-98 344.25,-98 350.25,-98 356.25,-104 356.25,-110 356.25,-110 356.25,-290 356.25,-290 356.25,-296 350.25,-302 344.25,-302 344.25,-302 20,-302 20,-302 14,-302 8,-296 8,-290 8,-290 8,-110 8,-110 8,-104 14,-98 20,-98"/>
-<text xml:space="preserve" text-anchor="middle" x="182.12" y="-289.45" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="9.00">src [2799 LOC]</text>
+<text xml:space="preserve" text-anchor="middle" x="182.12" y="-289.45" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="9.00">src [2867 LOC]</text>
 </g>
 <g id="clust3" class="cluster">
 <title>cluster_src/import_cruiser</title>
 <path fill="#ffffff" stroke="black" stroke-width="2" d="M28,-106C28,-106 336.25,-106 336.25,-106 342.25,-106 348.25,-112 348.25,-118 348.25,-118 348.25,-264 348.25,-264 348.25,-270 342.25,-276 336.25,-276 336.25,-276 28,-276 28,-276 22,-276 16,-270 16,-264 16,-264 16,-118 16,-118 16,-112 22,-106 28,-106"/>
-<text xml:space="preserve" text-anchor="middle" x="182.12" y="-263.45" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="9.00">import_cruiser [2799 LOC]</text>
+<text xml:space="preserve" text-anchor="middle" x="182.12" y="-263.45" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="9.00">import_cruiser [2867 LOC]</text>
 </g>
 <!-- src/import_cruiser/click -->
 <g id="node1" class="node">
 <title>src/import_cruiser/click</title>
-<g id="a_node1"><a xlink:href="click" xlink:title="click [0 LOC]">
-<path fill="#dcfce7" stroke="#15803d" stroke-width="1.4" d="M201.71,-33.88C201.71,-33.88 146.54,-33.88 146.54,-33.88 143.58,-33.88 140.62,-30.92 140.62,-27.96 140.62,-27.96 140.62,-22.04 140.62,-22.04 140.62,-19.08 143.58,-16.12 146.54,-16.12 146.54,-16.12 201.71,-16.12 201.71,-16.12 204.67,-16.12 207.62,-19.08 207.62,-22.04 207.62,-22.04 207.62,-27.96 207.62,-27.96 207.62,-30.92 204.67,-33.88 201.71,-33.88"/>
-<text xml:space="preserve" text-anchor="start" x="148.62" y="-21.32" font-family="Helvetica,sans-Serif" font-size="9.00" fill="#14532d">click [0 LOC]</text>
+<g id="a_node1"><a xlink:href="click" xlink:title="click">
+<path fill="#dcfce7" stroke="#15803d" stroke-width="1.4" d="M195.21,-33.88C195.21,-33.88 153.04,-33.88 153.04,-33.88 150.08,-33.88 147.12,-30.92 147.12,-27.96 147.12,-27.96 147.12,-22.04 147.12,-22.04 147.12,-19.08 150.08,-16.12 153.04,-16.12 153.04,-16.12 195.21,-16.12 195.21,-16.12 198.17,-16.12 201.12,-19.08 201.12,-22.04 201.12,-22.04 201.12,-27.96 201.12,-27.96 201.12,-30.92 198.17,-33.88 195.21,-33.88"/>
+<text xml:space="preserve" text-anchor="start" x="165.12" y="-21.32" font-family="Helvetica,sans-Serif" font-size="9.00" fill="#14532d">click</text>
 </a>
 </g>
 </g>
 <!-- src/import_cruiser/analyzer.py -->
 <g id="node2" class="node">
 <title>src/import_cruiser/analyzer.py</title>
-<g id="a_node2"><a xlink:href="src/import_cruiser/analyzer.py" xlink:title="analyzer.py [346 LOC]">
+<g id="a_node2"><a xlink:href="src/import_cruiser/analyzer.py" xlink:title="analyzer.py [366 LOC]">
 <path fill="#ffffcc" stroke="black" d="M221.58,-219.88C221.58,-219.88 126.67,-219.88 126.67,-219.88 123.71,-219.88 120.75,-216.92 120.75,-213.96 120.75,-213.96 120.75,-208.04 120.75,-208.04 120.75,-205.08 123.71,-202.12 126.67,-202.12 126.67,-202.12 221.58,-202.12 221.58,-202.12 224.54,-202.12 227.5,-205.08 227.5,-208.04 227.5,-208.04 227.5,-213.96 227.5,-213.96 227.5,-216.92 224.54,-219.88 221.58,-219.88"/>
-<text xml:space="preserve" text-anchor="start" x="128.75" y="-207.32" font-family="Helvetica,sans-Serif" font-size="9.00">analyzer.py [346 LOC]</text>
+<text xml:space="preserve" text-anchor="start" x="128.75" y="-207.32" font-family="Helvetica,sans-Serif" font-size="9.00">analyzer.py [366 LOC]</text>
 </a>
 </g>
 </g>
@@ -60,17 +60,17 @@
 <!-- src/import_cruiser/cli.py -->
 <g id="node3" class="node">
 <title>src/import_cruiser/cli.py</title>
-<g id="a_node3"><a xlink:href="src/import_cruiser/cli.py" xlink:title="cli.py [855 LOC]">
+<g id="a_node3"><a xlink:href="src/import_cruiser/cli.py" xlink:title="cli.py [903 LOC]">
 <path fill="#ffffcc" stroke="black" d="M98.58,-145.88C98.58,-145.88 29.92,-145.88 29.92,-145.88 26.96,-145.88 24,-142.92 24,-139.96 24,-139.96 24,-134.04 24,-134.04 24,-131.08 26.96,-128.12 29.92,-128.12 29.92,-128.12 98.58,-128.12 98.58,-128.12 101.54,-128.12 104.5,-131.08 104.5,-134.04 104.5,-134.04 104.5,-139.96 104.5,-139.96 104.5,-142.92 101.54,-145.88 98.58,-145.88"/>
-<text xml:space="preserve" text-anchor="start" x="32" y="-133.32" font-family="Helvetica,sans-Serif" font-size="9.00">cli.py [855 LOC]</text>
+<text xml:space="preserve" text-anchor="start" x="32" y="-133.32" font-family="Helvetica,sans-Serif" font-size="9.00">cli.py [903 LOC]</text>
 </a>
 </g>
 </g>
 <!-- src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/click -->
 <g id="edge2" class="edge">
 <title>src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/click</title>
-<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M67.59,-127.65C72.94,-108.23 87.97,-63.4 117.5,-40 121.77,-36.62 126.74,-33.99 131.92,-31.96"/>
-<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="132.26,-34.06 137.29,-30.18 130.94,-30.08 132.26,-34.06"/>
+<path fill="none" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" d="M67.59,-127.65C72.94,-108.23 87.97,-63.4 117.5,-40 123.42,-35.31 130.68,-32.08 137.98,-29.86"/>
+<polygon fill="#000000" fill-opacity="0.121569" stroke="#000000" stroke-width="2" stroke-opacity="0.121569" points="138.26,-31.96 143.56,-28.44 137.22,-27.89 138.26,-31.96"/>
 </g>
 <!-- src/import_cruiser/cli.py&#45;&gt;src/import_cruiser/analyzer.py -->
 <g id="edge3" class="edge">
@@ -132,9 +132,9 @@
 <!-- src/import_cruiser/tomli -->
 <g id="node9" class="node">
 <title>src/import_cruiser/tomli</title>
-<g id="a_node9"><a xlink:href="tomli" xlink:title="tomli [0 LOC]">
-<path fill="#dcfce7" stroke="#15803d" stroke-width="1.4" d="M202.46,-63.88C202.46,-63.88 145.79,-63.88 145.79,-63.88 142.83,-63.88 139.88,-60.92 139.88,-57.96 139.88,-57.96 139.88,-52.04 139.88,-52.04 139.88,-49.08 142.83,-46.12 145.79,-46.12 145.79,-46.12 202.46,-46.12 202.46,-46.12 205.42,-46.12 208.38,-49.08 208.38,-52.04 208.38,-52.04 208.38,-57.96 208.38,-57.96 208.38,-60.92 205.42,-63.88 202.46,-63.88"/>
-<text xml:space="preserve" text-anchor="start" x="147.88" y="-51.33" font-family="Helvetica,sans-Serif" font-size="9.00" fill="#14532d">tomli [0 LOC]</text>
+<g id="a_node9"><a xlink:href="tomli" xlink:title="tomli">
+<path fill="#dcfce7" stroke="#15803d" stroke-width="1.4" d="M195.21,-63.88C195.21,-63.88 153.04,-63.88 153.04,-63.88 150.08,-63.88 147.12,-60.92 147.12,-57.96 147.12,-57.96 147.12,-52.04 147.12,-52.04 147.12,-49.08 150.08,-46.12 153.04,-46.12 153.04,-46.12 195.21,-46.12 195.21,-46.12 198.17,-46.12 201.12,-49.08 201.12,-52.04 201.12,-52.04 201.12,-57.96 201.12,-57.96 201.12,-60.92 198.17,-63.88 195.21,-63.88"/>
+<text xml:space="preserve" text-anchor="start" x="164.38" y="-51.33" font-family="Helvetica,sans-Serif" font-size="9.00" fill="#14532d">tomli</text>
 </a>
 </g>
 </g>

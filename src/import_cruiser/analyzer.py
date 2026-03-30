@@ -131,18 +131,41 @@ def _collect_imports_fallback(source: str, module_name: str) -> list[tuple[str, 
     imports: list[tuple[str, int]] = []
     for lineno, line in enumerate(source.splitlines(), start=1):
         stripped = line.strip()
+        if stripped.startswith("import "):
+            raw = stripped[7:].strip()
+            for candidate in raw.split(","):
+                name = candidate.strip().split(" as ", 1)[0].strip()
+                if name:
+                    imports.append((name, lineno))
+            continue
+
         if not stripped.startswith("from ") or " import " not in stripped:
             continue
-        target = stripped[5:].split(" import ", 1)[0].strip()
+        target, imported_names = stripped[5:].split(" import ", 1)
+        target = target.strip()
+        imported_names = imported_names.strip()
         if not target.startswith("."):
+            if target:
+                imports.append((target, lineno))
             continue
 
         level = len(target) - len(target.lstrip("."))
         module = target[level:]
         base_parts = parts[: max(0, len(parts) - level)]
-        resolved = ".".join(base_parts + [module]) if base_parts and module else module
-        if resolved:
-            imports.append((resolved, lineno))
+
+        if module:
+            resolved = ".".join(base_parts + [module]) if base_parts else module
+            if resolved:
+                imports.append((resolved, lineno))
+            continue
+
+        for alias in imported_names.split(","):
+            alias_name = alias.strip().split(" as ", 1)[0].strip()
+            if not alias_name:
+                continue
+            resolved = ".".join(base_parts + [alias_name]) if base_parts else alias_name
+            if resolved:
+                imports.append((resolved, lineno))
 
     return imports
 

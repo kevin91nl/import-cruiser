@@ -225,6 +225,22 @@ class TestExportDot:
         assert 'label="External dependencies"' in result
         assert 'fillcolor="#DCFCE7"' in result
 
+    def test_depcruise_show_loc_skips_external_dependency_loc(self) -> None:
+        graph = DependencyGraph()
+        graph.add_module(Module(name="pkg.main", path="pkg/main.py", loc=10))
+        graph.add_module(Module(name="requests", path="", loc=99))
+        graph.add_dependency(Dependency(source="pkg.main", target="requests"))
+
+        result = export_dot(
+            graph,
+            style="depcruise",
+            show_loc=True,
+            external_package_roots={"requests"},
+        )
+        assert "main.py [10 LOC]" in result
+        assert "requests [99 LOC]" not in result
+        assert "label=<requests>" in result
+
     def test_depcruise_falls_back_to_module_names(self) -> None:
         graph = DependencyGraph()
         graph.add_module(Module(name="a", path=""))

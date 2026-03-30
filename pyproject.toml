@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "import-cruiser"
-version = "0.2.29"
+version = "0.2.30"
 description = "Analyze, validate, and visualize Python import dependencies — like dependency-cruiser for Python."
 authors = ["kevin91nl"]
 readme = "README.md"
@@ -55,11 +55,13 @@ indirection_allowlist = ["import_cruiser.detector._normalise_cycle"]
 
 [tool.import_cruiser_code_budget]
 file_allowlist = [
+  "src/import_cruiser/analyzer.py",
   "src/import_cruiser/cli.py",
   "src/import_cruiser/exporter.py",
 ]
 function_allowlist = [
   "import_cruiser.analyzer._collect_imports",
+  "import_cruiser.analyzer._collect_imports_fallback",
   "import_cruiser.cli._apply_graph_options",
   "import_cruiser.exporter.export_dot",
   "import_cruiser.exporter._html_with_svg",

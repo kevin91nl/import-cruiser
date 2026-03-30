@@ -535,21 +535,21 @@ def _depcruise_cluster_line(
     cluster_loc_totals: dict[str, int] | None = None,
     external_package_roots: set[str] | None = None,
 ) -> str:
+    parts, is_external_dependency_group = _depcruise_cluster_parts(
+        module,
+        root,
+        external_anchor_parts,
+        external_package_roots,
+    )
     rel_path = node_id if module.path else module.name
     label = Path(module.path).name if module.path else module.name
-    if show_loc:
+    if show_loc and not is_external_dependency_group:
         label = _label_with_loc(label, module.loc)
     attrs = _depcruise_node_attrs(
         module,
         label,
         rel_path,
         external_package_roots=external_package_roots,
-    )
-    parts, is_external_dependency_group = _depcruise_cluster_parts(
-        module,
-        root,
-        external_anchor_parts,
-        external_package_roots,
     )
     if not parts:
         return f"    {_dot_id(node_id)} [{attrs} ]"

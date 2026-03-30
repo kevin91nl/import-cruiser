@@ -227,6 +227,16 @@ def main() -> None:
     help="Include non-dev external dependencies as grouped nodes.",
 )
 @click.option(
+    "--external-deps-include",
+    multiple=True,
+    help="Regex to include external dependency roots (repeatable).",
+)
+@click.option(
+    "--external-deps-exclude",
+    multiple=True,
+    help="Regex to exclude external dependency roots (repeatable).",
+)
+@click.option(
     "--show-loc/--no-show-loc",
     default=False,
     show_default=True,
@@ -257,6 +267,8 @@ def cmd_analyze(
     include_db_connectors: bool,
     include_http_hosts: bool,
     include_external_deps: bool,
+    external_deps_include: tuple[str, ...],
+    external_deps_exclude: tuple[str, ...],
     show_loc: bool,
 ) -> None:
     """Analyze Python import dependencies in PATH and output results.
@@ -267,10 +279,12 @@ def cmd_analyze(
         exclude_path,
         exclude_common_noise_paths,
     )
-    external_patterns, _ = _external_dependency_info(
+    external_patterns, external_package_roots = _external_dependency_info(
         include_db_connectors,
         include_external_deps,
         path,
+        include_roots=list(external_deps_include),
+        exclude_roots=list(external_deps_exclude),
     )
     graph = Analyzer(
         path,
@@ -311,6 +325,7 @@ def cmd_analyze(
             style=style,
             edge_mode=edge_mode,
             show_loc=show_loc,
+            external_package_roots=external_package_roots,
         )
     elif fmt == "svg":
         result = _export_svg(
@@ -322,6 +337,7 @@ def cmd_analyze(
             style=style,
             edge_mode=edge_mode,
             show_loc=show_loc,
+            external_package_roots=external_package_roots,
         )
     elif fmt == "html":
         result = export_html(
@@ -333,6 +349,7 @@ def cmd_analyze(
             style=style,
             edge_mode=edge_mode,
             show_loc=show_loc,
+            external_package_roots=external_package_roots,
             generation_command=_invocation_command(),
         )
     else:
@@ -577,6 +594,16 @@ def cmd_validate(
     help="Include non-dev external dependencies as grouped nodes.",
 )
 @click.option(
+    "--external-deps-include",
+    multiple=True,
+    help="Regex to include external dependency roots (repeatable).",
+)
+@click.option(
+    "--external-deps-exclude",
+    multiple=True,
+    help="Regex to exclude external dependency roots (repeatable).",
+)
+@click.option(
     "--show-loc/--no-show-loc",
     default=False,
     show_default=True,
@@ -614,6 +641,8 @@ def cmd_export(
     include_db_connectors: bool,
     include_http_hosts: bool,
     include_external_deps: bool,
+    external_deps_include: tuple[str, ...],
+    external_deps_exclude: tuple[str, ...],
     show_loc: bool,
     output: Optional[str],
 ) -> None:
@@ -630,6 +659,8 @@ def cmd_export(
         include_db_connectors,
         include_external_deps,
         path,
+        include_roots=list(external_deps_include),
+        exclude_roots=list(external_deps_exclude),
     )
     graph = Analyzer(
         path,
@@ -795,6 +826,8 @@ def _external_dependency_info(
     include_db_connectors: bool,
     include_external_deps: bool,
     project_path: str,
+    include_roots: list[str] | None = None,
+    exclude_roots: list[str] | None = None,
 ) -> tuple[list[str], set[str]]:
     patterns = _external_patterns_for_db(include_db_connectors)
     roots: set[str] = set()
@@ -803,11 +836,39 @@ def _external_dependency_info(
     dependency_roots = _non_dev_dependency_roots(project_path)
     if not dependency_roots:
         return patterns, roots
+    dependency_roots = _filter_dependency_roots(
+        dependency_roots,
+        include_roots=include_roots or [],
+        exclude_roots=exclude_roots or [],
+    )
+    if not dependency_roots:
+        return patterns, roots
     roots.update(dependency_roots)
     patterns.extend(
         rf"(^|\.){re.escape(root)}(\.|$)" for root in sorted(dependency_roots)
     )
     return patterns, roots
+
+
+def _filter_dependency_roots(
+    roots: set[str],
+    include_roots: list[str],
+    exclude_roots: list[str],
+) -> set[str]:
+    filtered = set(roots)
+    if include_roots:
+        filtered = {
+            root
+            for root in filtered
+            if any(re.search(pattern, root) for pattern in include_roots)
+        }
+    if exclude_roots:
+        filtered = {
+            root
+            for root in filtered
+            if not any(re.search(pattern, root) for pattern in exclude_roots)
+        }
+    return filtered
 
 
 def _non_dev_dependency_roots(project_path: str) -> set[str]:

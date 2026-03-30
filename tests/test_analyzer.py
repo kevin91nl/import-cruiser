@@ -63,6 +63,23 @@ class TestCollectImports:
         imports = _collect_imports(src, "mymod")
         assert imports == []
 
+    def test_nested_imports_in_function_and_try_except(self) -> None:
+        src = (
+            "def run():\n"
+            "    import os\n"
+            "    from pkg import util\n"
+            "    try:\n"
+            "        import httpx\n"
+            "    except ImportError:\n"
+            "        import requests\n"
+        )
+        imports = _collect_imports(src, "mymod")
+        names = {name for name, _ in imports}
+        assert "os" in names
+        assert "pkg" in names
+        assert "httpx" in names
+        assert "requests" in names
+
 
 class TestAnalyzer:
     def _make_project(self, tmp_path: Path, files: dict[str, str]) -> Path:
@@ -142,6 +159,36 @@ class TestAnalyzer:
         dep_pairs = {(d.source, d.target) for d in graph.dependencies}
         assert ("a", "b") in dep_pairs
         assert ("b", "c") in dep_pairs
+
+    def test_imports_inside_function_and_try_except_are_included(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        self._make_project(
+            tmp_path,
+            {
+                "pkg/__init__.py": "",
+                "pkg/main.py": (
+                    "def run():\n"
+                    "    import pkg.helper\n"
+                    "    try:\n"
+                    "        from pkg import extra\n"
+                    "    except ImportError:\n"
+                    "        import pkg.fallback\n"
+                ),
+                "pkg/helper.py": "x = 1\n",
+                "pkg/extra.py": "x = 1\n",
+                "pkg/fallback.py": "x = 1\n",
+            },
+        )
+        graph = Analyzer(tmp_path).analyze()
+        dep_pairs = {(d.source, d.target) for d in graph.dependencies}
+        assert ("pkg.main", "pkg.helper") in dep_pairs
+        assert ("pkg.main", "pkg") in dep_pairs or (
+            "pkg.main",
+            "pkg.extra",
+        ) in dep_pairs
+        assert ("pkg.main", "pkg.fallback") in dep_pairs
 
     def test_hidden_directories_skipped(self, tmp_path: Path) -> None:
         self._make_project(
