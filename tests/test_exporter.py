@@ -241,6 +241,66 @@ class TestExportDot:
         assert "requests [99 LOC]" not in result
         assert "label=<requests>" in result
 
+    def test_depcruise_show_loc_skips_database_external_loc(self) -> None:
+        graph = DependencyGraph()
+        graph.add_module(Module(name="pkg.main", path="pkg/main.py", loc=10))
+        graph.add_module(Module(name="sqlalchemy", path="", loc=99))
+        graph.add_dependency(Dependency(source="pkg.main", target="sqlalchemy"))
+
+        result = export_dot(
+            graph,
+            style="depcruise",
+            show_loc=True,
+            external_package_roots={"sqlalchemy"},
+        )
+        assert "main.py [10 LOC]" in result
+        assert "sqlalchemy [99 LOC]" not in result
+        assert "label=<sqlalchemy>" in result
+
+    def test_depcruise_database_not_grouped_as_external_dependency(self) -> None:
+        graph = DependencyGraph()
+        graph.add_module(Module(name="pkg.main", path="pkg/main.py"))
+        graph.add_module(Module(name="sqlalchemy", path=""))
+        graph.add_dependency(Dependency(source="pkg.main", target="sqlalchemy"))
+
+        result = export_dot(
+            graph,
+            style="depcruise",
+            external_package_roots={"sqlalchemy"},
+        )
+        assert "cluster___external_deps__" not in result
+        assert 'shape="cylinder"' in result
+
+    def test_depcruise_show_loc_skips_http_external_loc(self) -> None:
+        graph = DependencyGraph()
+        graph.add_module(Module(name="pkg.main", path="pkg/main.py", loc=10))
+        graph.add_module(Module(name="api.shodan.io", path="", loc=99))
+        graph.add_dependency(Dependency(source="pkg.main", target="api.shodan.io"))
+
+        result = export_dot(
+            graph,
+            style="depcruise",
+            show_loc=True,
+            external_package_roots={"api"},
+        )
+        assert "main.py [10 LOC]" in result
+        assert "api.shodan.io [99 LOC]" not in result
+        assert "label=<api.shodan.io>" in result
+
+    def test_depcruise_http_not_grouped_as_external_dependency(self) -> None:
+        graph = DependencyGraph()
+        graph.add_module(Module(name="pkg.main", path="pkg/main.py"))
+        graph.add_module(Module(name="api.shodan.io", path=""))
+        graph.add_dependency(Dependency(source="pkg.main", target="api.shodan.io"))
+
+        result = export_dot(
+            graph,
+            style="depcruise",
+            external_package_roots={"api"},
+        )
+        assert "cluster___external_deps__" not in result
+        assert 'shape="box" style="rounded,filled,dashed"' in result
+
     def test_depcruise_falls_back_to_module_names(self) -> None:
         graph = DependencyGraph()
         graph.add_module(Module(name="a", path=""))

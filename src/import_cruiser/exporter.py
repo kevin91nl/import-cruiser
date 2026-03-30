@@ -543,7 +543,18 @@ def _depcruise_cluster_line(
     )
     rel_path = node_id if module.path else module.name
     label = Path(module.path).name if module.path else module.name
-    if show_loc and not is_external_dependency_group:
+    if (
+        show_loc
+        and not is_external_dependency_group
+        and not _is_database_external_node(
+            module.name,
+            module.path,
+        )
+        and not _is_http_external_node(
+            module.name,
+            module.path,
+        )
+    ):
         label = _label_with_loc(label, module.loc)
     attrs = _depcruise_node_attrs(
         module,
@@ -1033,6 +1044,10 @@ def _is_external_package_node(
     if not external_package_roots:
         return False
     root = name.split(".", 1)[0]
+    if root in DB_EXTERNAL_MODULES:
+        return False
+    if _is_http_external_node(name, path):
+        return False
     return root in external_package_roots
 
 
