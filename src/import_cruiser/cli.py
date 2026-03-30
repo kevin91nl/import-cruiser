@@ -948,7 +948,10 @@ def _non_dev_dependency_roots_from_pyproject(pyproject_path: Path) -> set[str]:
 
 
 def _poetry_dependency_roots(data: dict[str, object]) -> set[str]:
-    poetry = data.get("tool", {}).get("poetry")
+    tool = data.get("tool")
+    if not isinstance(tool, dict):
+        return set()
+    poetry = tool.get("poetry")
     if not isinstance(poetry, dict):
         return set()
     dependencies = poetry.get("dependencies")
