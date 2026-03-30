@@ -116,11 +116,25 @@ def export_dot(
 
     graph_attrs, node_attrs, edge_attrs = _style_attrs(style, rankdir)
     depcruise = style == "depcruise"
-    path_root = _common_root(graph.modules) if cluster_mode == "path" else None
+    path_root = _common_root(graph.modules)
     http_nodes = {
         module.name
         for module in graph.modules
         if _is_http_external_node(module.name, module.path)
+    }
+    database_nodes = {
+        module.name
+        for module in graph.modules
+        if _is_database_external_node(module.name, module.path)
+    }
+    external_dep_nodes = {
+        module.name
+        for module in graph.modules
+        if _is_external_package_node(
+            module.name,
+            module.path,
+            external_package_roots,
+        )
     }
     external_anchor_parts = _external_anchor_parts(graph, path_root)
     node_id_map: dict[str, str] = {}
@@ -140,6 +154,8 @@ def export_dot(
             modules=graph.modules,
             node_id_map=node_id_map,
             path_root=path_root,
+            cluster_mode=cluster_mode,
+            cluster_depth=cluster_depth,
             external_anchor_parts=external_anchor_parts,
             show_loc=show_loc,
             external_package_roots=external_package_roots,
@@ -174,6 +190,8 @@ def export_dot(
             cycle_edges=cycle_edges,
             depcruise=depcruise,
             http_nodes=http_nodes,
+            database_nodes=database_nodes,
+            external_dep_nodes=external_dep_nodes,
         )
 
     lines.append("}")
@@ -209,17 +227,27 @@ def _append_depcruise_nodes(
     modules: list[Module],
     node_id_map: dict[str, str],
     path_root: str | None,
+    cluster_mode: str,
+    cluster_depth: int,
     external_anchor_parts: dict[str, list[str]],
     show_loc: bool,
     external_package_roots: set[str] | None,
 ) -> None:
     cluster_loc_totals = (
-        _depcruise_cluster_loc_totals(modules, path_root) if show_loc else {}
+        _depcruise_cluster_loc_totals(
+            modules,
+            path_root,
+            cluster_mode=cluster_mode,
+            cluster_depth=cluster_depth,
+        )
+        if show_loc
+        else {}
     )
     for module in sorted(modules, key=lambda m: m.name):
         node_id = _depcruise_node_id(
             module,
             path_root,
+            cluster_mode=cluster_mode,
             external_anchor_parts=external_anchor_parts,
         )
         node_id_map[module.name] = node_id
@@ -228,6 +256,8 @@ def _append_depcruise_nodes(
                 module,
                 node_id,
                 path_root,
+                cluster_mode=cluster_mode,
+                cluster_depth=cluster_depth,
                 external_anchor_parts=external_anchor_parts,
                 show_loc=show_loc,
                 cluster_loc_totals=cluster_loc_totals,
@@ -350,6 +380,8 @@ def _append_dependency_edges(
     cycle_edges: set[tuple[str, str]],
     depcruise: bool,
     http_nodes: set[str],
+    database_nodes: set[str],
+    external_dep_nodes: set[str],
 ) -> None:
     for dep in sorted(dependencies, key=lambda d: (d.source, d.target)):
         src = _dot_id(node_id_map.get(dep.source, dep.source))
@@ -360,14 +392,29 @@ def _append_dependency_edges(
             lines.append(f'    {src} -> {tgt} [color="{color}", penwidth=2.2];')
         elif (dep.source, dep.target) in cycle_edges and not depcruise:
             lines.append(f'    {src} -> {tgt} [color="#C0392B", penwidth=1.6];')
+        elif depcruise and dep.target in database_nodes:
+            lines.append(
+                f'    {src} -> {tgt} [color="#B91C1C", style="dashed", '
+                "penwidth=1.8, arrowsize=0.7]"
+            )
         elif depcruise and dep.target in http_nodes:
             lines.append(
                 f'    {src} -> {tgt} [color="#1D4ED8", style="dashed", '
                 "penwidth=1.4, arrowsize=0.7]"
             )
+        elif depcruise and dep.target in external_dep_nodes:
+            lines.append(
+                f'    {src} -> {tgt} [color="#15803D", style="dashed", '
+                "penwidth=1.8, arrowsize=0.7]"
+            )
         else:
-            suffix = "" if depcruise else ";"
-            lines.append(f"    {src} -> {tgt}{suffix}")
+            if depcruise:
+                lines.append(
+                    f'    {src} -> {tgt} [color="#0000001f", style="solid", '
+                    "penwidth=1.4, arrowsize=0.7]"
+                )
+            else:
+                lines.append(f"    {src} -> {tgt};")
 
 
 def export_svg(
@@ -510,12 +557,16 @@ def _dot_id(name: str) -> str:
 def _depcruise_node_id(
     module: Module,
     root: str | None,
+    cluster_mode: str = "path",
     external_anchor_parts: dict[str, list[str]] | None = None,
 ) -> str:
     if not module.path:
-        anchor = (external_anchor_parts or {}).get(module.name, [])
-        if anchor:
-            return "/".join([*anchor, module.name])
+        if cluster_mode == "path":
+            anchor = (external_anchor_parts or {}).get(module.name, [])
+            if anchor:
+                return "/".join([*anchor, module.name])
+        return module.name
+    if cluster_mode == "module":
         return module.name
     try:
         path = Path(module.path).resolve()
@@ -530,6 +581,8 @@ def _depcruise_cluster_line(
     module: Module,
     node_id: str,
     root: str | None,
+    cluster_mode: str = "path",
+    cluster_depth: int = 2,
     external_anchor_parts: dict[str, list[str]] | None = None,
     show_loc: bool = False,
     cluster_loc_totals: dict[str, int] | None = None,
@@ -538,6 +591,8 @@ def _depcruise_cluster_line(
     parts, is_external_dependency_group = _depcruise_cluster_parts(
         module,
         root,
+        cluster_mode,
+        cluster_depth,
         external_anchor_parts,
         external_package_roots,
     )
@@ -545,7 +600,11 @@ def _depcruise_cluster_line(
     label = Path(module.path).name if module.path else module.name
     if (
         show_loc
-        and not is_external_dependency_group
+        and not _is_external_package_node(
+            module.name,
+            module.path,
+            external_package_roots,
+        )
         and not _is_database_external_node(
             module.name,
             module.path,
@@ -592,21 +651,34 @@ def _depcruise_cluster_line(
 def _depcruise_cluster_parts(
     module: Module,
     root: str | None,
+    cluster_mode: str,
+    cluster_depth: int,
     external_anchor_parts: dict[str, list[str]] | None,
     external_package_roots: set[str] | None,
 ) -> tuple[list[str], bool]:
     if module.path:
+        if cluster_mode == "module":
+            parts = module.name.split(".")[:-1]
+            if cluster_depth > 0:
+                parts = parts[:cluster_depth]
+            return parts, False
         try:
             path = Path(module.path).resolve()
             if root:
                 path = path.relative_to(root)
-            return list(path.parts[:-1]), False
+            parts = list(path.parts[:-1])
+            if cluster_depth > 0:
+                parts = parts[:cluster_depth]
+            return parts, False
         except ValueError:
-            return list(Path(module.path).parts[:-1]), False
-    if _is_external_package_node(module.name, module.path, external_package_roots):
-        return [EXTERNAL_DEPENDENCY_CLUSTER_ID], True
-    if external_anchor_parts:
-        return external_anchor_parts.get(module.name, []), False
+            parts = list(Path(module.path).parts[:-1])
+            if cluster_depth > 0:
+                parts = parts[:cluster_depth]
+            return parts, False
+    if not module.path:
+        if cluster_mode == "path" and external_anchor_parts:
+            return external_anchor_parts.get(module.name, []), False
+        return [], False
     return [], False
 
 
@@ -830,18 +902,27 @@ def _label_with_loc(label: str, loc: int) -> str:
 def _depcruise_cluster_loc_totals(
     modules: list[Module],
     root: str | None,
+    cluster_mode: str = "path",
+    cluster_depth: int = 0,
 ) -> dict[str, int]:
     totals: dict[str, int] = {}
     for module in modules:
-        if not module.path:
-            continue
-        try:
-            path = Path(module.path).resolve()
-            if root:
-                path = path.relative_to(root)
-            parts = list(path.parts[:-1])
-        except ValueError:
-            parts = list(Path(module.path).parts[:-1])
+        if cluster_mode == "module":
+            parts = module.name.split(".")[:-1]
+            if cluster_depth > 0:
+                parts = parts[:cluster_depth]
+        else:
+            if not module.path:
+                continue
+            try:
+                path = Path(module.path).resolve()
+                if root:
+                    path = path.relative_to(root)
+                parts = list(path.parts[:-1])
+            except ValueError:
+                parts = list(Path(module.path).parts[:-1])
+            if cluster_depth > 0:
+                parts = parts[:cluster_depth]
         if not parts:
             continue
         prefix = parts[0]

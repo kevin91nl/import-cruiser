@@ -283,6 +283,7 @@ def cmd_analyze(
         include_db_connectors,
         include_external_deps,
         path,
+        include_paths=list(include_path),
         include_roots=list(external_deps_include),
         exclude_roots=list(external_deps_exclude),
     )
@@ -659,6 +660,7 @@ def cmd_export(
         include_db_connectors,
         include_external_deps,
         path,
+        include_paths=list(include_path),
         include_roots=list(external_deps_include),
         exclude_roots=list(external_deps_exclude),
     )
@@ -826,6 +828,7 @@ def _external_dependency_info(
     include_db_connectors: bool,
     include_external_deps: bool,
     project_path: str,
+    include_paths: list[str] | None = None,
     include_roots: list[str] | None = None,
     exclude_roots: list[str] | None = None,
 ) -> tuple[list[str], set[str]]:
@@ -833,7 +836,10 @@ def _external_dependency_info(
     roots: set[str] = set()
     if not include_external_deps:
         return patterns, roots
-    dependency_roots = _non_dev_dependency_roots(project_path)
+    dependency_roots = _non_dev_dependency_roots(
+        project_path,
+        include_paths=include_paths or [],
+    )
     if not dependency_roots:
         return patterns, roots
     dependency_roots = _filter_dependency_roots(
@@ -871,33 +877,121 @@ def _filter_dependency_roots(
     return filtered
 
 
-def _non_dev_dependency_roots(project_path: str) -> set[str]:
+def _non_dev_dependency_roots(
+    project_path: str,
+    include_paths: list[str] | None = None,
+) -> set[str]:
     candidate = Path(project_path)
     try:
         candidate = candidate.resolve()
     except OSError:
         candidate = candidate.absolute()
-    pyproject_path = _find_pyproject(candidate)
-    if pyproject_path is None:
+
+    pyproject_paths: set[Path] = set()
+    root_pyproject = _find_pyproject(candidate)
+    if root_pyproject is not None:
+        pyproject_paths.add(root_pyproject)
+
+    include_patterns = include_paths or []
+    if include_patterns:
+        pyproject_paths.update(
+            _find_pyprojects_for_include_paths(candidate, include_patterns)
+        )
+
+    if not pyproject_paths:
         return set()
+
+    roots: set[str] = set()
+    for pyproject_path in pyproject_paths:
+        roots.update(_non_dev_dependency_roots_from_pyproject(pyproject_path))
+    return roots
+
+
+def _find_pyprojects_for_include_paths(
+    project_root: Path,
+    include_paths: list[str],
+) -> set[Path]:
+    compiled: list[re.Pattern[str]] = []
+    for pattern in include_paths:
+        try:
+            compiled.append(re.compile(pattern))
+        except re.error:
+            continue
+    if not compiled:
+        return set()
+
+    pyproject_paths: set[Path] = set()
+    for py_file in project_root.rglob("*.py"):
+        rel_posix = py_file.relative_to(project_root).as_posix()
+        abs_posix = py_file.as_posix()
+        if not any(
+            regex.search(rel_posix) or regex.search(abs_posix) for regex in compiled
+        ):
+            continue
+        pyproject_path = _find_pyproject(py_file.parent)
+        if pyproject_path is not None:
+            pyproject_paths.add(pyproject_path)
+    return pyproject_paths
+
+
+def _non_dev_dependency_roots_from_pyproject(pyproject_path: Path) -> set[str]:
     try:
         with pyproject_path.open("rb") as fo:
             data = tomllib.load(fo)
     except (OSError, tomllib.TOMLDecodeError):
         return set()
+
+    roots: set[str] = set()
+    roots.update(_poetry_dependency_roots(data))
+    roots.update(_project_dependency_roots(data))
+    return roots
+
+
+def _poetry_dependency_roots(data: dict[str, object]) -> set[str]:
     poetry = data.get("tool", {}).get("poetry")
     if not isinstance(poetry, dict):
         return set()
     dependencies = poetry.get("dependencies")
     if not isinstance(dependencies, dict):
         return set()
+
     roots: set[str] = set()
     for name in dependencies.keys():
         if not isinstance(name, str) or name == "python":
             continue
-        normalized = name.replace("-", "_")
-        roots.add(normalized)
+        roots.add(name.replace("-", "_"))
     return roots
+
+
+def _project_dependency_roots(data: dict[str, object]) -> set[str]:
+    project = data.get("project")
+    if not isinstance(project, dict):
+        return set()
+
+    dependencies = project.get("dependencies")
+    if not isinstance(dependencies, list):
+        return set()
+
+    roots: set[str] = set()
+    for item in dependencies:
+        if not isinstance(item, str):
+            continue
+        root = _project_dependency_name(item)
+        if root:
+            roots.add(root)
+    return roots
+
+
+def _project_dependency_name(requirement: str) -> str | None:
+    candidate = requirement.strip().split(";", maxsplit=1)[0].strip()
+    if not candidate:
+        return None
+    if "[" in candidate:
+        candidate = candidate.split("[", maxsplit=1)[0].strip()
+    match = re.match(r"^([A-Za-z0-9_.-]+)", candidate)
+    if not match:
+        return None
+    return match.group(1).replace("-", "_")
 
 
 def _find_pyproject(start: Path) -> Path | None:

@@ -114,6 +114,36 @@ requests = "^2.0"
         module_names = {module["name"] for module in data["modules"]}
         assert "requests" in module_names
 
+    def test_analyze_include_external_deps_from_project_dependencies(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / "pyproject.toml").write_text(
+            """
+[project]
+name = "mypkg"
+version = "0.1.0"
+dependencies = [
+  "requests>=2.0",
+  "httpx[socks]>=0.27",
+]
+"""
+        )
+        (tmp_path / "app.py").write_text("import requests\nimport httpx\n")
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "analyze",
+                str(tmp_path),
+                "--include-external-deps",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        module_names = {module["name"] for module in data["modules"]}
+        assert "requests" in module_names
+        assert "httpx" in module_names
+
     def test_analyze_include_external_deps_with_include_filter(
         self, tmp_path: Path
     ) -> None:
@@ -653,6 +683,40 @@ httpx = "^0.27"
         assert "sqlalchemy" in result.output
         assert "api.github.com" in result.output
         assert "psycopg" not in result.output
+
+    def test_export_include_path_reads_pyproject_of_included_subtree(
+        self, tmp_path: Path
+    ) -> None:
+        workspace = tmp_path / "workspace"
+        worker_root = workspace / "worker"
+        src_dir = worker_root / "src"
+        src_dir.mkdir(parents=True)
+
+        (worker_root / "pyproject.toml").write_text(
+            """
+[project]
+name = "worker"
+version = "0.1.0"
+dependencies = ["requests>=2"]
+"""
+        )
+        (src_dir / "app.py").write_text("import requests\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "export",
+                str(workspace),
+                "--format",
+                "dot",
+                "--include-path",
+                r"(^|/)worker/src/",
+                "--include-external-deps",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "requests" in result.output
 
 
 class TestVersionCommand:

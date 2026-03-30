@@ -41,5 +41,7 @@ htmlcov/
 *.swo
 .DS_Store
 appmap.log
+artifacts/*.dot
 artifacts/*.html
+artifacts/*.svg
 !artifacts/self-graph
