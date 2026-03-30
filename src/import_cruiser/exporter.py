@@ -1168,7 +1168,7 @@ def _external_anchor_parts(
         if cluster_mode == "module":
             parts = source_module.name.split(".")[:-1]
         else:
-            parts = _module_anchor_parts(source_module.path, path_root)
+            parts = _module_parent_parts(source_module.path, path_root)
         if not parts:
             continue
         source_parts_by_external.setdefault(target_module.name, []).append(parts)
@@ -1176,10 +1176,6 @@ def _external_anchor_parts(
     anchors: dict[str, list[str]] = {}
     for external, parts_list in source_parts_by_external.items():
         common = _common_prefix(parts_list)
-        if cluster_mode == "module" and common:
-            # Keep externals at package level (e.g. import_cruiser.click)
-            # instead of nesting in deep internals like import_cruiser.cli.
-            common = common[:1]
         anchors[external] = common
     return anchors
 
@@ -1192,16 +1188,6 @@ def _module_parent_parts(path: str, path_root: str | None) -> list[str]:
         return list(parent.parts)
     except ValueError:
         return list(Path(path).resolve().parent.parts)
-
-
-def _module_anchor_parts(path: str, path_root: str | None) -> list[str]:
-    parent_parts = _module_parent_parts(path, path_root)
-    if not Path(path).is_absolute():
-        return parent_parts
-    stem = Path(path).stem
-    if not stem:
-        return parent_parts
-    return [*parent_parts, stem]
 
 
 def _common_prefix(parts_list: list[list[str]]) -> list[str]:

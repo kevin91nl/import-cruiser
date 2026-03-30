@@ -422,8 +422,8 @@ class TestExportDot:
         )
 
         result = export_dot(graph, style="depcruise")
-        assert '"src/pkg/adapters/http/client/sqlalchemy"' in result
-        assert '"src/pkg/adapters/http/client/api.shodan.io"' in result
+        assert '"src/pkg/adapters/http/sqlalchemy"' in result
+        assert '"src/pkg/adapters/http/api.shodan.io"' in result
 
     def test_depcruise_external_path_anchor_not_truncated_by_cluster_depth(
         self, tmp_path: Path
@@ -454,10 +454,10 @@ class TestExportDot:
             cluster_mode="path",
             cluster_depth=1,
         )
-        assert '"cluster_src/pkg/adapters/http/client"' in result
-        assert '"src/pkg/adapters/http/client/defusedxml"' in result
+        assert '"cluster_src/pkg/adapters/http"' in result
+        assert '"src/pkg/adapters/http/defusedxml"' in result
 
-    def test_depcruise_external_nodes_anchor_to_package_in_module_mode(
+    def test_depcruise_external_nodes_anchor_to_parent_usage_in_module_mode(
         self, tmp_path: Path
     ) -> None:
         pkg = tmp_path / "src" / "pkg" / "adapters" / "http"
@@ -494,8 +494,8 @@ class TestExportDot:
             cluster_mode="module",
             cluster_depth=1,
         )
-        assert '"pkg.sqlalchemy"' in result
-        assert '"pkg.api.shodan.io"' in result
+        assert '"pkg.adapters.http.sqlalchemy"' in result
+        assert '"pkg.adapters.http.api.shodan.io"' in result
         assert 'subgraph "cluster_pkg"' in result
 
     def test_depcruise_helpers_fallback_on_invalid_root(self) -> None:
