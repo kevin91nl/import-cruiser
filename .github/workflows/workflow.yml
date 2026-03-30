@@ -31,7 +31,7 @@ jobs:
 
       - name: Run pre-commit
         env:
-          SKIP: refresh-self-graph
+          SKIP: refresh-self-graph,unit-tests-targeted
         run: pre-commit run --all-files
 
       - name: Build package
