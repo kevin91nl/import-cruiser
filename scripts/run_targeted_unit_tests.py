@@ -24,7 +24,17 @@ def main() -> int:
         print("No tests/ directory found; skipping unit tests.")
         return 0
 
-    cmd = [sys.executable, "-m", "pytest", "tests", "-q", "--disable-warnings", "--maxfail=1"]
+    cmd = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "tests",
+        "-q",
+        "--disable-warnings",
+        "--maxfail=1",
+        "--tb=short",
+        "--assert=plain",
+    ]
     print("Running:", " ".join(cmd))
     return subprocess.call(cmd)
 

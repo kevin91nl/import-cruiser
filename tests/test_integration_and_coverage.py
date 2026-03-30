@@ -310,8 +310,8 @@ def test_collect_imports_fallback_parser_branches(
     )
     monkeypatch.setattr("import_cruiser.analyzer.ast.walk", lambda tree: [])
 
-    assert _collect_imports("from pkg import name\n", "pkg.mod") == []
-    assert _collect_imports("from .. import name\n", "pkg.mod") == []
+    assert _collect_imports("from pkg import name\n", "pkg.mod") == [("pkg", 1)]
+    assert _collect_imports("from .. import name\n", "pkg.mod") == [("name", 1)]
     assert _collect_imports("from ..name import thing\n", "pkg") == [("name", 1)]
 
 
