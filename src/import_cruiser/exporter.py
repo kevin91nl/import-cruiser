@@ -136,7 +136,11 @@ def export_dot(
             external_package_roots,
         )
     }
-    external_anchor_parts = _external_anchor_parts(graph, path_root)
+    external_anchor_parts = _external_anchor_parts(
+        graph,
+        path_root,
+        cluster_mode=cluster_mode,
+    )
     node_id_map: dict[str, str] = {}
     lines = _init_dot_lines(
         graph_name=graph_name,
@@ -565,6 +569,10 @@ def _depcruise_node_id(
             anchor = (external_anchor_parts or {}).get(module.name, [])
             if anchor:
                 return "/".join([*anchor, module.name])
+        if cluster_mode == "module":
+            anchor = (external_anchor_parts or {}).get(module.name, [])
+            if anchor:
+                return ".".join([*anchor, module.name])
         return module.name
     if cluster_mode == "module":
         return module.name
@@ -676,8 +684,17 @@ def _depcruise_cluster_parts(
                 parts = parts[:cluster_depth]
             return parts, False
     if not module.path:
-        if cluster_mode == "path" and external_anchor_parts:
-            return external_anchor_parts.get(module.name, []), False
+        if external_anchor_parts:
+            anchored_parts = external_anchor_parts.get(module.name, [])
+            if cluster_mode == "path":
+                # Keep full anchor depth for externals so they stay attached
+                # to the most specific importer context (e.g. per-file adapters)
+                # even when general cluster_depth is shallow.
+                return anchored_parts, False
+            if cluster_mode == "module":
+                if cluster_depth > 0:
+                    anchored_parts = anchored_parts[:cluster_depth]
+                return anchored_parts, False
         return [], False
     return [], False
 
@@ -1135,6 +1152,7 @@ def _is_external_package_node(
 def _external_anchor_parts(
     graph: DependencyGraph,
     path_root: str | None,
+    cluster_mode: str = "path",
 ) -> dict[str, list[str]]:
     module_map = {module.name: module for module in graph.modules}
     source_parts_by_external: dict[str, list[list[str]]] = {}
@@ -1147,15 +1165,23 @@ def _external_anchor_parts(
             continue
         if not source_module.path:
             continue
-        parts = _module_parent_parts(source_module.path, path_root)
+        if cluster_mode == "module":
+            parts = source_module.name.split(".")[:-1]
+        else:
+            parts = _module_anchor_parts(source_module.path, path_root)
         if not parts:
             continue
         source_parts_by_external.setdefault(target_module.name, []).append(parts)
 
-    return {
-        external: _common_prefix(parts_list)
-        for external, parts_list in source_parts_by_external.items()
-    }
+    anchors: dict[str, list[str]] = {}
+    for external, parts_list in source_parts_by_external.items():
+        common = _common_prefix(parts_list)
+        if cluster_mode == "module" and common:
+            # Keep externals at package level (e.g. import_cruiser.click)
+            # instead of nesting in deep internals like import_cruiser.cli.
+            common = common[:1]
+        anchors[external] = common
+    return anchors
 
 
 def _module_parent_parts(path: str, path_root: str | None) -> list[str]:
@@ -1166,6 +1192,16 @@ def _module_parent_parts(path: str, path_root: str | None) -> list[str]:
         return list(parent.parts)
     except ValueError:
         return list(Path(path).resolve().parent.parts)
+
+
+def _module_anchor_parts(path: str, path_root: str | None) -> list[str]:
+    parent_parts = _module_parent_parts(path, path_root)
+    if not Path(path).is_absolute():
+        return parent_parts
+    stem = Path(path).stem
+    if not stem:
+        return parent_parts
+    return [*parent_parts, stem]
 
 
 def _common_prefix(parts_list: list[list[str]]) -> list[str]:

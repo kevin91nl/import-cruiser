@@ -422,10 +422,42 @@ class TestExportDot:
         )
 
         result = export_dot(graph, style="depcruise")
-        assert '"src/pkg/adapters/http/sqlalchemy"' in result
-        assert '"src/pkg/adapters/http/api.shodan.io"' in result
+        assert '"src/pkg/adapters/http/client/sqlalchemy"' in result
+        assert '"src/pkg/adapters/http/client/api.shodan.io"' in result
 
-    def test_depcruise_external_nodes_stay_loose_in_module_mode(
+    def test_depcruise_external_path_anchor_not_truncated_by_cluster_depth(
+        self, tmp_path: Path
+    ) -> None:
+        pkg = tmp_path / "src" / "pkg" / "adapters" / "http"
+        pkg.mkdir(parents=True)
+        module_path = pkg / "client.py"
+        module_path.write_text("x = 1\n")
+        sibling_path = tmp_path / "src" / "pkg" / "core.py"
+        sibling_path.parent.mkdir(parents=True, exist_ok=True)
+        sibling_path.write_text("x = 1\n")
+
+        graph = DependencyGraph()
+        graph.add_module(Module(name="pkg.adapters.http.client", path=str(module_path)))
+        graph.add_module(Module(name="pkg.core", path=str(sibling_path)))
+        graph.add_module(Module(name="defusedxml", path=""))
+        graph.add_dependency(
+            Dependency(
+                source="pkg.adapters.http.client",
+                target="defusedxml",
+                line=1,
+            )
+        )
+
+        result = export_dot(
+            graph,
+            style="depcruise",
+            cluster_mode="path",
+            cluster_depth=1,
+        )
+        assert '"cluster_src/pkg/adapters/http/client"' in result
+        assert '"src/pkg/adapters/http/client/defusedxml"' in result
+
+    def test_depcruise_external_nodes_anchor_to_package_in_module_mode(
         self, tmp_path: Path
     ) -> None:
         pkg = tmp_path / "src" / "pkg" / "adapters" / "http"
@@ -462,10 +494,9 @@ class TestExportDot:
             cluster_mode="module",
             cluster_depth=1,
         )
-        assert '"src/pkg/adapters/http/sqlalchemy"' not in result
-        assert '"src/pkg/adapters/http/api.shodan.io"' not in result
-        assert '"sqlalchemy"' in result
-        assert '"api.shodan.io"' in result
+        assert '"pkg.sqlalchemy"' in result
+        assert '"pkg.api.shodan.io"' in result
+        assert 'subgraph "cluster_pkg"' in result
 
     def test_depcruise_helpers_fallback_on_invalid_root(self) -> None:
         module = Module(name="pkg.mod", path="a.py")

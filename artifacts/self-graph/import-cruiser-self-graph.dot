@@ -3,24 +3,24 @@ strict digraph "import_cruiser"{
     node [shape="box" style="rounded, filled" height="0.2" color="black" fillcolor="#ffffcc" fontcolor="black" fontname="Helvetica" fontsize="9"]
     edge [arrowhead="normal" arrowsize="0.6" penwidth="2.0" color="#0000001f" fontname="Helvetica" fontsize="9"]
 
-    "click" [label=<click> tooltip="click" URL="click" shape="box" style="rounded,filled" fillcolor="#DCFCE7" color="#15803D" penwidth=1.4 fontcolor="#14532D" ]
-    subgraph "cluster_import_cruiser" {label="import_cruiser [3018 LOC]" "import_cruiser.analyzer" [label=<analyzer.py [366 LOC]> tooltip="analyzer.py [366 LOC]" URL="import_cruiser.analyzer" ] }
-    subgraph "cluster_import_cruiser" {label="import_cruiser [3018 LOC]" "import_cruiser.cli" [label=<cli.py [969 LOC]> tooltip="cli.py [969 LOC]" URL="import_cruiser.cli" ] }
-    subgraph "cluster_import_cruiser" {label="import_cruiser [3018 LOC]" "import_cruiser.config" [label=<config.py [46 LOC]> tooltip="config.py [46 LOC]" URL="import_cruiser.config" ] }
-    subgraph "cluster_import_cruiser" {label="import_cruiser [3018 LOC]" "import_cruiser.detector" [label=<detector.py [4 LOC]> tooltip="detector.py [4 LOC]" URL="import_cruiser.detector" ] }
-    subgraph "cluster_import_cruiser" {label="import_cruiser [3018 LOC]" "import_cruiser.exporter" [label=<exporter.py [1281 LOC]> tooltip="exporter.py [1281 LOC]" URL="import_cruiser.exporter" ] }
-    subgraph "cluster_import_cruiser" {label="import_cruiser [3018 LOC]" "import_cruiser.graph" [label=<graph.py [299 LOC]> tooltip="graph.py [299 LOC]" URL="import_cruiser.graph" ] }
-    subgraph "cluster_import_cruiser" {label="import_cruiser [3018 LOC]" "import_cruiser.validator" [label=<validator.py [53 LOC]> tooltip="validator.py [53 LOC]" URL="import_cruiser.validator" ] }
-    "tomli" [label=<tomli> tooltip="tomli" URL="tomli" shape="box" style="rounded,filled" fillcolor="#DCFCE7" color="#15803D" penwidth=1.4 fontcolor="#14532D" ]
+    subgraph "cluster_import_cruiser" {label="import_cruiser [3045 LOC]" "import_cruiser.click" [label=<click> tooltip="click" URL="click" shape="box" style="rounded,filled" fillcolor="#DCFCE7" color="#15803D" penwidth=1.4 fontcolor="#14532D" ] }
+    subgraph "cluster_import_cruiser" {label="import_cruiser [3045 LOC]" "import_cruiser.analyzer" [label=<analyzer.py [366 LOC]> tooltip="analyzer.py [366 LOC]" URL="import_cruiser.analyzer" ] }
+    subgraph "cluster_import_cruiser" {label="import_cruiser [3045 LOC]" "import_cruiser.cli" [label=<cli.py [969 LOC]> tooltip="cli.py [969 LOC]" URL="import_cruiser.cli" ] }
+    subgraph "cluster_import_cruiser" {label="import_cruiser [3045 LOC]" "import_cruiser.config" [label=<config.py [46 LOC]> tooltip="config.py [46 LOC]" URL="import_cruiser.config" ] }
+    subgraph "cluster_import_cruiser" {label="import_cruiser [3045 LOC]" "import_cruiser.detector" [label=<detector.py [4 LOC]> tooltip="detector.py [4 LOC]" URL="import_cruiser.detector" ] }
+    subgraph "cluster_import_cruiser" {label="import_cruiser [3045 LOC]" "import_cruiser.exporter" [label=<exporter.py [1308 LOC]> tooltip="exporter.py [1308 LOC]" URL="import_cruiser.exporter" ] }
+    subgraph "cluster_import_cruiser" {label="import_cruiser [3045 LOC]" "import_cruiser.graph" [label=<graph.py [299 LOC]> tooltip="graph.py [299 LOC]" URL="import_cruiser.graph" ] }
+    subgraph "cluster_import_cruiser" {label="import_cruiser [3045 LOC]" "import_cruiser.validator" [label=<validator.py [53 LOC]> tooltip="validator.py [53 LOC]" URL="import_cruiser.validator" ] }
+    subgraph "cluster_import_cruiser" {label="import_cruiser [3045 LOC]" "import_cruiser.tomli" [label=<tomli> tooltip="tomli" URL="tomli" shape="box" style="rounded,filled" fillcolor="#DCFCE7" color="#15803D" penwidth=1.4 fontcolor="#14532D" ] }
 
     "import_cruiser.analyzer" -> "import_cruiser.graph" [color="#0000001f", style="solid", penwidth=1.4, arrowsize=0.7]
-    "import_cruiser.cli" -> "click" [color="#15803D", style="dashed", penwidth=1.8, arrowsize=0.7]
+    "import_cruiser.cli" -> "import_cruiser.click" [color="#15803D", style="dashed", penwidth=1.8, arrowsize=0.7]
     "import_cruiser.cli" -> "import_cruiser.analyzer" [color="#0000001f", style="solid", penwidth=1.4, arrowsize=0.7]
     "import_cruiser.cli" -> "import_cruiser.config" [color="#0000001f", style="solid", penwidth=1.4, arrowsize=0.7]
     "import_cruiser.cli" -> "import_cruiser.exporter" [color="#0000001f", style="solid", penwidth=1.4, arrowsize=0.7]
     "import_cruiser.cli" -> "import_cruiser.graph" [color="#0000001f", style="solid", penwidth=1.4, arrowsize=0.7]
     "import_cruiser.cli" -> "import_cruiser.validator" [color="#0000001f", style="solid", penwidth=1.4, arrowsize=0.7]
-    "import_cruiser.cli" -> "tomli" [color="#15803D", style="dashed", penwidth=1.8, arrowsize=0.7]
+    "import_cruiser.cli" -> "import_cruiser.tomli" [color="#15803D", style="dashed", penwidth=1.8, arrowsize=0.7]
     "import_cruiser.detector" -> "import_cruiser.graph" [color="#0000001f", style="solid", penwidth=1.4, arrowsize=0.7]
     "import_cruiser.exporter" -> "import_cruiser.graph" [color="#0000001f", style="solid", penwidth=1.4, arrowsize=0.7]
     "import_cruiser.validator" -> "import_cruiser.config" [color="#0000001f", style="solid", penwidth=1.4, arrowsize=0.7]
